@@ -1,0 +1,10 @@
+*
+
+!.git
+!compose
+!gradle
+!s3proxy
+!src
+!.gitmodules
+!build.gradle
+!gradlew

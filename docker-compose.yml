@@ -1,0 +1,38 @@
+services:
+  Jortage:
+    container_name: jortage_poolmgr
+    image: jortage_poolmgr
+    network_mode: "host"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    extra_hosts:
+      - "s3.lan:127.0.0.1"
+      - "mastodon.s3.lan:127.0.0.1"
+    depends_on:
+      - Mariadb
+      - S3Proxy
+
+  Mariadb:
+    container_name: jortage_mariadb
+    image: mariadb:11.2.4
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      start_period: 10s
+      interval: 10s
+      timeout: 5s
+    ports:
+      - 3306:3306
+    environment:
+      - MARIADB_ROOT_PASSWORD=jortage
+      - MARIADB_USER=jortage
+      - MARIADB_PASSWORD=password
+      - MARIADB_DATABASE=jortage
+
+  S3Proxy:
+    container_name: jortage_s3proxy
+    image: andrewgaul/s3proxy
+    ports:
+      - 8080:80
+    environment:
+      - S3PROXY_AUTHORIZATION=none
