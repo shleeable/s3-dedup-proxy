@@ -2,9 +2,8 @@
 
 !.git
 !compose
-!gradle
 !s3proxy
+!project
 !src
 !.gitmodules
-!build.gradle
-!gradlew
+!build.sbt

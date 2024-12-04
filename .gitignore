@@ -1,14 +1,19 @@
-.classpath
-.gradle
-.project
-.metadata
-.settings
-/bin
-/build
-hs_err_pid*.log
-*.iml
-*.DS_Store
-.idea/
-data.mv
-/backups
-/config.jkson
+# macOS
+.DS_Store
+
+# sbt specific
+dist/*
+target/
+lib_managed/
+src_managed/
+project/boot/
+project/plugins/project/
+project/local-plugins.sbt
+.history
+.ensime
+.ensime_cache/
+.sbt-scripted/
+local.sbt
+
+# Bloop
+.bsp

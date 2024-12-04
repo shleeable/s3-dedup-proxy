@@ -1,4 +1,4 @@
-FROM docker.io/library/debian:bookworm-slim AS root
+FROM docker.io/library/debian:bookworm-slim AS build
 
 ENV DEBIAN_FRONTEND=noninteractive
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -8,24 +8,31 @@ RUN apt-get update \
         ca-certificates \
         curl \
         git \
+        gzip \
         openjdk-17-jre \
-        nginx
+    && curl -o /usr/share/keyrings/sbt.asc "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x2EE0EA64E40A89B84B2DF73499E82A75642AC823" \
+    && echo "deb [signed-by=/usr/share/keyrings/sbt.asc] https://repo.scala-sbt.org/scalasbt/debian all main" | tee /etc/apt/sources.list.d/sbt.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends sbt
 
-FROM root AS build
-
-COPY . /poolmgr
-WORKDIR /poolmgr
+COPY . /s3-dedup-proxy
+WORKDIR /s3-dedup-proxy
 
 RUN git submodule init && git submodule update
-RUN ./gradlew shadowJar
+RUN sbt stage
 
-FROM root
+FROM docker.io/library/debian:bookworm-slim
 
-WORKDIR /
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        openjdk-17-jre
 
-COPY --from=build /poolmgr/build/libs/jortage-poolmgr-1.5.5.jar /jortage-poolmgr-1.5.5.jar
-COPY compose/config.jkson /
+COPY --from=build /s3-dedup-proxy/target/universal/stage /s3-dedup-proxy
+COPY compose/config.jkson /s3-dedup-proxy/
+
+WORKDIR /s3-dedup-proxy
 
 COPY compose/s3.service /etc/nginx/sites-enabled/
 
-ENTRYPOINT ["java", "-jar", "/jortage-poolmgr-1.5.5.jar"]
+ENTRYPOINT ["/s3-dedup-proxy/bin/s3-dedup-proxy"]
