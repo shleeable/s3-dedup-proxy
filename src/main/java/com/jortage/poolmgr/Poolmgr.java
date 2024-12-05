@@ -45,29 +45,22 @@ import com.google.common.escape.Escaper;
 import com.google.common.hash.HashCode;
 import com.google.common.net.UrlEscapers;
 
-import blue.endless.jankson.Jankson;
-import blue.endless.jankson.JsonElement;
-import blue.endless.jankson.JsonObject;
-import blue.endless.jankson.JsonPrimitive;
+import timshel.s3dedupproxy.BackendConfig;
+import timshel.s3dedupproxy.GlobalConfig;
 
 public class Poolmgr {
 
 	private static final File configFile = new File("config.jkson");
-	public static long configFileLastLoaded;
 	public static BlobStore backingBlobStore, backingBackupBlobStore, dumpsStore;
-	public static String bucket, backupBucket;
-	public static String publicHost;
 	public static DataSource dataSource;
 	public static Map<String, String> users;
 	public static volatile boolean readOnly = false;
 	private static boolean backingUp = false;
-	private static boolean rivetEnabled;
-	private static boolean rivetState;
 	public static boolean useNewUrls;
 	
 	public static final Table<String, String, Object> provisionalMaps = HashBasedTable.create();
 
-	public static void main(String[] args) throws Exception {
+	public static void start(GlobalConfig config) throws Exception {
 		try {
 			Properties dumpsProps = new Properties();
 			dumpsProps.setProperty(FilesystemConstants.PROPERTY_BASEDIR, "dumps");
@@ -77,7 +70,7 @@ public class Poolmgr {
 					.getBlobStore();
 					
 			Stopwatch initSw = Stopwatch.createStarted();
-			reloadConfig();
+			loadConfig(config);
 	
 			System.err.print("Starting S3 server... ");
 			System.err.flush();
@@ -101,11 +94,10 @@ public class Poolmgr {
 			pool.setName("Jetty-Common");
 	
 			s3Proxy.setBlobStoreLocator((identity, container, blob) -> {
-				reloadConfigIfChanged();
 				String secret = users.get(identity);
 				if (secret != null) {
 					return Maps.immutableEntry(secret,
-							new JortageBlobStore(backingBlobStore, dumpsStore, bucket, identity, dataSource));
+							new JortageBlobStore(backingBlobStore, dumpsStore, config.backend().bucket(), identity, dataSource));
 				} else {
 					throw new RuntimeException("Access denied");
 				}
@@ -121,12 +113,11 @@ public class Poolmgr {
 			redirConn.setHost("localhost");
 			redirConn.setPort(23279);
 			redir.addConnector(redirConn);
-			redir.setHandler(new OuterHandler(new RedirHandler(dumpsStore)));
+			redir.setHandler(new OuterHandler(new RedirHandler(config.backend().publicHost(), dumpsStore)));
 			redir.start();
 			System.err.println("ready on http://localhost:23279");
 			
-			rivetState = rivetEnabled;
-			if (rivetEnabled) {
+			if( config.rivet().enabled() ) {
 				System.err.print("Starting Rivet server... ");
 				System.err.flush();
 				Server rivet = new Server(pool);
@@ -134,7 +125,7 @@ public class Poolmgr {
 				rivetConn.setHost("localhost");
 				rivetConn.setPort(23280);
 				rivet.addConnector(rivetConn);
-				rivet.setHandler(new OuterHandler(new RivetHandler()));
+				rivet.setHandler(new OuterHandler(new RivetHandler(config.backend().bucket(), config.backend().publicHost())));
 				rivet.start();
 				System.err.println("ready on http://localhost:23280");
 			} else {
@@ -145,12 +136,11 @@ public class Poolmgr {
 			System.err.flush();
 			try {
 				Signal.handle(new Signal("ALRM"), (sig) -> {
-					reloadConfigIfChanged();
 					if (backingUp) {
 						System.err.println("Ignoring SIGALRM, backup already in progress");
 						return;
 					}
-					if (backupBucket == null) {
+					if (backingBackupBlobStore == null) {
 						System.err.println("Ignoring SIGALRM, nowhere to backup to");
 						return;
 					}
@@ -159,6 +149,9 @@ public class Poolmgr {
 						Stopwatch sw = Stopwatch.createStarted();
 						try (Connection c = dataSource.getConnection()) {
 							backingUp = true;
+							String bucket = config.backend().bucket();
+							String backupBucket = config.backupBackend().get().bucket();
+
 							try (PreparedStatement delete = c.prepareStatement("DELETE FROM `pending_backup` WHERE `hash` = ?;")) {
 								try (PreparedStatement ps = c.prepareStatement("SELECT `hash` FROM `pending_backup`;")) {
 									try (ResultSet rs = ps.executeQuery()) {
@@ -205,51 +198,34 @@ public class Poolmgr {
 		}
 	}
 
-	public static void reloadConfigIfChanged() {
-//		if (System.currentTimeMillis()-configFileLastLoaded > 500 && configFile.lastModified() > configFileLastLoaded) reloadConfig();
-	}
-
 	private static String s(int i) {
 		return i == 1 ? "" : "s";
 	}
 
-	private static void reloadConfig() {
-		boolean reloading = dataSource != null;
+	private static void loadConfig(GlobalConfig config) {
 		try {
-			String prelude = "\r"+(reloading ? "Reloading" : "Loading")+" config: ";
-			System.err.print(prelude+"Parsing...");
+			System.err.print("Constructing blob stores...");
 			System.err.flush();
-			JsonObject configTmp = Jankson.builder().build().load(configFile);
-			long configFileLastLoadedTmp = System.currentTimeMillis();
-			String bucketTmp = ((JsonPrimitive)configTmp.getObject("backend").get("bucket")).asString();
-			String publicHostTmp = ((JsonPrimitive)configTmp.getObject("backend").get("publicHost")).asString();
-			boolean rivetEnabledTmp = configTmp.recursiveGet(boolean.class, "rivet.enabled");
-			boolean readOnlyTmp = MoreObjects.firstNonNull(configTmp.get(boolean.class, "readOnly"), false);
-			boolean useNewUrlsTmp = MoreObjects.firstNonNull(configTmp.get(boolean.class, "useNewUrls"), false);
-			System.err.print(prelude+"Constructing blob stores...");
-			System.err.flush();
-			BlobStore backingBlobStoreTmp = createBlobStore(configTmp.getObject("backend"));
-			String backupBucketTmp;
+			BlobStore backingBlobStoreTmp = createBlobStore(config.backend());
 			BlobStore backingBackupBlobStoreTmp;
-			if (configTmp.containsKey("backupBackend")) {
-				backupBucketTmp = ((JsonPrimitive)configTmp.getObject("backupBackend").get("bucket")).asString();
-				backingBackupBlobStoreTmp = createBlobStore(configTmp.getObject("backupBackend"));
+			if ( config.backupBackend().nonEmpty() ) {
+				backingBackupBlobStoreTmp = createBlobStore(config.backupBackend().get());
 			} else {
-				backupBucketTmp = null;
 				backingBackupBlobStoreTmp = null;
 			}
-			JsonObject sql = configTmp.getObject("mysql");
-			String sqlHost = ((JsonPrimitive)sql.get("host")).asString();
-			int sqlPort = ((Number)((JsonPrimitive)sql.get("port")).getValue()).intValue();
-			String sqlDb = ((JsonPrimitive)sql.get("database")).asString();
-			String sqlUser = ((JsonPrimitive)sql.get("user")).asString();
-			String sqlPass = ((JsonPrimitive)sql.get("pass")).asString();
+
 			Escaper pesc = UrlEscapers.urlPathSegmentEscaper();
-			Escaper esc = UrlEscapers.urlFormParameterEscaper();
-			System.err.print(prelude+"Connecting to MariaDB...   ");
+
+			String sqlHost = pesc.escape(config.mysql().host());
+			int sqlPort = config.mysql().port();
+			String sqlDb = pesc.escape(config.mysql().database());
+			String sqlUser = config.mysql().user();
+			String sqlPass = config.mysql().pass();
+
+			System.err.print("Connecting to MariaDB...   ");
 			System.err.flush();
 			HikariDataSource dataSourceTmp = new HikariDataSource();
-			dataSourceTmp.setJdbcUrl("jdbc:mariadb://"+pesc.escape(sqlHost)+":"+sqlPort+"/"+pesc.escape(sqlDb));
+			dataSourceTmp.setJdbcUrl("jdbc:mariadb://"+sqlHost+":"+sqlPort+"/"+sqlDb);
 			dataSourceTmp.setUsername(sqlUser);
 			dataSourceTmp.setPassword(sqlPass);
 			dataSourceTmp.addDataSourceProperty("cachePrepStmts", "true");
@@ -291,49 +267,28 @@ public class Poolmgr {
 						"  PRIMARY KEY (`hash`)\n" +
 						") ROW_FORMAT=COMPRESSED;");
 			}
-			ImmutableMap.Builder<String, String> usersTmp = ImmutableMap.builder();
-			for (Map.Entry<String, JsonElement> en : configTmp.getObject("users").entrySet()) {
-				usersTmp.put(en.getKey(), ((JsonPrimitive)en.getValue()).asString());
+
+			users = scala.collection.JavaConverters.mapAsJavaMapConverter(config.users()).asJava();
+			for (Map.Entry<String, String> en : users.entrySet()) {
 				dumpsStore.createContainerInLocation(null, en.getKey());
 			}
-			users = usersTmp.build();
-			System.err.println("\r"+(reloading ? "Reloading" : "Loading")+" config... done                  ");
-			HikariDataSource oldDataSource = (HikariDataSource)dataSource;
-			configFileLastLoaded = configFileLastLoadedTmp;
-			bucket = bucketTmp;
-			publicHost = publicHostTmp;
 			backingBlobStore = backingBlobStoreTmp;
-			backupBucket = backupBucketTmp;
 			backingBackupBlobStore = backingBackupBlobStoreTmp;
 			dataSource = dataSourceTmp;
-			rivetEnabled = rivetEnabledTmp;
-			useNewUrls = useNewUrlsTmp;
-			if (rivetState != rivetEnabled && reloading) {
-				System.err.println("WARNING: Cannot hot-"+(rivetEnabled ? "enable" : "disable")+" Rivet. jortage-proxy must be restarted for this change to take effect.");
-			}
-			readOnly = readOnlyTmp;
-			if (oldDataSource != null) {
-				oldDataSource.close();
-			}
+			readOnly = config.readOnly();
 		} catch (Exception e) {
 			System.err.println(" failed");
 			e.printStackTrace();
-			if (reloading) {
-				System.err.println("Failed to reload config. Behavior unchanged.");
-			} else {
-				System.err.println("Failed to load config. Exit");
-				System.exit(2);
-			}
 		}
 	}
 
-	private static BlobStore createBlobStore(JsonObject obj) {
-		String protocol = ((JsonPrimitive)obj.get("protocol")).asString();
+	private static BlobStore createBlobStore(BackendConfig conf) {
+		String protocol = conf.protocol();
 		if ("s3".equals(protocol)) protocol = "aws-s3";
 		return ContextBuilder.newBuilder(protocol)
-			.credentials(((JsonPrimitive)obj.get("accessKeyId")).asString(), ((JsonPrimitive)obj.get("secretAccessKey")).asString())
+			.credentials(conf.accessKeyId(), conf.secretAccessKey())
 			.modules(ImmutableList.of(new SLF4JLoggingModule()))
-			.endpoint(((JsonPrimitive)obj.get("endpoint")).asString())
+			.endpoint(conf.endpoint())
 			.build(BlobStoreContext.class)
 			.getBlobStore();
 	}

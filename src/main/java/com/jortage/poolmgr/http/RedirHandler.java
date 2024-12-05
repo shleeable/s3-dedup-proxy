@@ -26,12 +26,13 @@ public final class RedirHandler extends AbstractHandler {
 	// same regex on the CDN
 	private static final Pattern VALID_EXTENSION = Pattern.compile("^(\\.[a-zA-Z0-9.]{2,8})?$");
 
+	private String publicHost;
 	private final BlobStore dumpsStore;
 
-	public RedirHandler(BlobStore dumpsStore) {
+	public RedirHandler(String publicHost, BlobStore dumpsStore) {
+		this.publicHost = publicHost;
 		this.dumpsStore = dumpsStore;
 	}
-
 
 
 	@Override
@@ -59,7 +60,6 @@ public final class RedirHandler extends AbstractHandler {
 				}
 				return;
 			}
-			Poolmgr.reloadConfigIfChanged();
 			try {
 				boolean waited = false;
 				while (true) {
@@ -97,9 +97,9 @@ public final class RedirHandler extends AbstractHandler {
 						}
 					}
 					String b64 = B64URLNP.encode(hash.asBytes());
-					response.setHeader("Location", Poolmgr.publicHost+"/blob2/"+b64.substring(0, 16)+"/"+b64.substring(16, b64.length()-8)+"/"+b64.substring(b64.length()-8)+ext);
+					response.setHeader("Location", publicHost+"/blob2/"+b64.substring(0, 16)+"/"+b64.substring(16, b64.length()-8)+"/"+b64.substring(b64.length()-8)+ext);
 				} else {
-					response.setHeader("Location", Poolmgr.publicHost+"/"+Poolmgr.hashToPath(hash.toString()));
+					response.setHeader("Location", publicHost+"/"+Poolmgr.hashToPath(hash.toString()));
 				}
 				response.setStatus(301);
 			} catch (IllegalArgumentException e) {

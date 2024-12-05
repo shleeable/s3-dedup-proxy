@@ -97,6 +97,9 @@ public final class RivetHandler extends AbstractHandler {
 		CACHED,
 	}
 	
+	private String bucket;
+	private String publicHost;
+
 	private final Gson gson;
 	// synchronize on a mutex when loading URLs to avoid download races that would waste bandwidth
 	private final Object retrieveMutex = new Object();
@@ -157,7 +160,7 @@ public final class RivetHandler extends AbstractHandler {
 												.contentType(getRes.body().contentType().toString())
 												.build();
 										long size = bss.getSource().size();
-										Poolmgr.backingBlobStore.putBlob(Poolmgr.bucket, blob,
+										Poolmgr.backingBlobStore.putBlob(bucket, blob,
 												new PutOptions().setBlobAccess(BlobAccess.PUBLIC_READ).multipart(size > 8192));
 										Queries.putPendingBackup(Poolmgr.dataSource, hash);
 										Queries.putFilesize(Poolmgr.dataSource, hash, size);
@@ -177,7 +180,6 @@ public final class RivetHandler extends AbstractHandler {
 				}
 
 				private HashCode checkShortCircuit(String originalUrl, HttpUrl url, Temperature temp) {
-					String publicHost = Poolmgr.publicHost.replaceFirst("^https?://", "");
 					String fullHost = url.host();
 					if (url.port() != (url.scheme().equals("https") ? 443 : 80)) {
 						fullHost = fullHost+":"+url.port();
@@ -202,7 +204,10 @@ public final class RivetHandler extends AbstractHandler {
 	
 	private OkHttpClient client;
 	
-	public RivetHandler() {
+	public RivetHandler(String bucket, String publicHost) {
+		this.bucket = bucket;
+		this.publicHost = publicHost.replaceFirst("^https?://", "");
+
 		this.gson = new Gson();
 		Interceptor urlChecker = (chain) -> {
 			Request req = chain.request();
@@ -253,7 +258,6 @@ public final class RivetHandler extends AbstractHandler {
 	public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest req, HttpServletResponse res) throws IOException, ServletException {
 		baseRequest.setHandled(true);
 		if ("/retrieve".equals(target)) {
-			Poolmgr.reloadConfigIfChanged();
 			if (Poolmgr.readOnly) {
 				jsonError(res, 503, "Currently in read-only maintenance mode; try again later");
 				return;
@@ -328,7 +332,6 @@ public final class RivetHandler extends AbstractHandler {
 				return;
 			}
 		} else if (target.startsWith("/upload/")) {
-			Poolmgr.reloadConfigIfChanged();
 			if (Poolmgr.readOnly) {
 				jsonError(res, 503, "Currently in read-only maintenance mode; try again later");
 				return;
@@ -380,7 +383,7 @@ public final class RivetHandler extends AbstractHandler {
 								.contentType(req.getContentType())
 								.build();
 						long size = bss.getSource().size();
-						Poolmgr.backingBlobStore.putBlob(Poolmgr.bucket, blob,
+						Poolmgr.backingBlobStore.putBlob(this.bucket, blob,
 								new PutOptions().setBlobAccess(BlobAccess.PUBLIC_READ).multipart(size > 8192));
 						Queries.putPendingBackup(Poolmgr.dataSource, hash);
 						Queries.putFilesize(Poolmgr.dataSource, hash, size);
