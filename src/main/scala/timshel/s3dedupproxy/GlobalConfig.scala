@@ -28,6 +28,6 @@ case class GlobalConfig(
     rivet: RivetConfig,
     backend: BackendConfig,
     backupBackend: Option[BackendConfig] = None,
-    mysql: DBConfig,
+    db: DBConfig,
     users: Map[String, String]
 ) derives ConfigReader

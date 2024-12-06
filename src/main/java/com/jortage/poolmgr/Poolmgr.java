@@ -216,18 +216,10 @@ public class Poolmgr {
 
 			Escaper pesc = UrlEscapers.urlPathSegmentEscaper();
 
-			String sqlHost = pesc.escape(config.mysql().host());
-			int sqlPort = config.mysql().port();
-			String sqlDb = pesc.escape(config.mysql().database());
-			String sqlUser = config.mysql().user();
-			String sqlPass = config.mysql().pass();
 
 			System.err.print("Connecting to MariaDB...   ");
 			System.err.flush();
 			HikariDataSource dataSourceTmp = new HikariDataSource();
-			dataSourceTmp.setJdbcUrl("jdbc:mariadb://"+sqlHost+":"+sqlPort+"/"+sqlDb);
-			dataSourceTmp.setUsername(sqlUser);
-			dataSourceTmp.setPassword(sqlPass);
 			dataSourceTmp.addDataSourceProperty("cachePrepStmts", "true");
 			dataSourceTmp.addDataSourceProperty("prepStmtCacheSize", "100");
 			dataSourceTmp.addDataSourceProperty("prepStmtCacheSqlLimit", "3000");
