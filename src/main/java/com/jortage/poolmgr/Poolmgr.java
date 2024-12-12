@@ -214,59 +214,12 @@ public class Poolmgr {
 				backingBackupBlobStoreTmp = null;
 			}
 
-			Escaper pesc = UrlEscapers.urlPathSegmentEscaper();
-
-
-			System.err.print("Connecting to MariaDB...   ");
-			System.err.flush();
-			HikariDataSource dataSourceTmp = new HikariDataSource();
-			dataSourceTmp.addDataSourceProperty("cachePrepStmts", "true");
-			dataSourceTmp.addDataSourceProperty("prepStmtCacheSize", "100");
-			dataSourceTmp.addDataSourceProperty("prepStmtCacheSqlLimit", "3000");
-			dataSourceTmp.addDataSourceProperty("useServerPrepStmts", "true");
-			dataSourceTmp.addDataSourceProperty("useLocalSessionState", "true");
-			dataSourceTmp.addDataSourceProperty("rewriteBatchedStatements", "true");
-			dataSourceTmp.addDataSourceProperty("cacheResultSetMetadata", "true");
-			dataSourceTmp.addDataSourceProperty("cacheServerConfiguration", "true");
-			dataSourceTmp.addDataSourceProperty("elideSetAutoCommits", "true");
-			dataSourceTmp.addDataSourceProperty("maintainTimeStats", "false");
-			try (Connection c = dataSourceTmp.getConnection()) {
-				execOneshot(c, "CREATE TABLE IF NOT EXISTS `name_map` (\n" +
-						"  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n" +
-						"  `identity` VARCHAR(255) NOT NULL,\n" +
-						"  `name` VARCHAR(255) NOT NULL,\n" +
-						"  `hash` BINARY(64) NOT NULL,\n" +
-						"  PRIMARY KEY (`id`),\n" +
-						"  UNIQUE INDEX `forward` (`identity`, `name`),\n" +
-						"  INDEX `reverse` (`hash`)\n" +
-						") ROW_FORMAT=COMPRESSED;");
-				execOneshot(c, "CREATE TABLE IF NOT EXISTS `multipart_uploads` (\n" +
-						"  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n" +
-						"  `identity` VARCHAR(255) NOT NULL,\n" +
-						"  `name` VARCHAR(255) NOT NULL,\n" +
-						"  `tempfile` VARCHAR(255) NOT NULL,\n" +
-						"  PRIMARY KEY (`id`),\n" +
-						"  UNIQUE INDEX `forward` (`identity`, `name`),\n" +
-						"  UNIQUE INDEX `reverse` (`tempfile`)\n" +
-						") ROW_FORMAT=COMPRESSED;");
-				execOneshot(c, "CREATE TABLE IF NOT EXISTS `filesizes` (\n" +
-						"  `hash` BINARY(64) NOT NULL,\n" +
-						"  `size` BIGINT UNSIGNED NOT NULL,\n" +
-						"  PRIMARY KEY (`hash`)\n" +
-						") ROW_FORMAT=COMPRESSED;");
-				execOneshot(c, "CREATE TABLE IF NOT EXISTS `pending_backup` (\n" +
-						"  `hash` BINARY(64) NOT NULL,\n" +
-						"  PRIMARY KEY (`hash`)\n" +
-						") ROW_FORMAT=COMPRESSED;");
-			}
-
 			users = scala.collection.JavaConverters.mapAsJavaMapConverter(config.users()).asJava();
 			for (Map.Entry<String, String> en : users.entrySet()) {
 				dumpsStore.createContainerInLocation(null, en.getKey());
 			}
 			backingBlobStore = backingBlobStoreTmp;
 			backingBackupBlobStore = backingBackupBlobStoreTmp;
-			dataSource = dataSourceTmp;
 			readOnly = config.readOnly();
 		} catch (Exception e) {
 			System.err.println(" failed");

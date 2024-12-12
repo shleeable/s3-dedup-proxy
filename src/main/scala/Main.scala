@@ -12,6 +12,7 @@ import org.flywaydb.core.Flyway;
       ds.setUser(config.db.user)
       ds.setPassword(config.db.pass)
       ds.setDatabaseName(config.db.database)
+
       val flyway = Flyway.configure().dataSource(ds).load()
       flyway.migrate()
 

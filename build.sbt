@@ -10,9 +10,8 @@ lazy val root = project
     scalaVersion := scala3Version,
     scalacOptions ++= Seq(
       "-deprecation",
+      "-encoding", "UTF-8",
       "-feature",
-      "-encoding",
-      "UTF-8",
       "-language:higherKinds"
     ),
     javaOptions += "-Duser.timezone=UTC",
@@ -23,7 +22,6 @@ lazy val root = project
       || "S3ProxyRule.java"
       || "Main.java",
     libraryDependencies ++= Seq(
-      "blue.endless"                     % "jankson"                    % "1.2.3",
       "com.fasterxml.jackson.dataformat" % "jackson-dataformat-xml"     % "2.15.2",
       "com.fasterxml.woodstox"           % "woodstox-core"              % "6.5.1",
       "com.google.code.findbugs"         % "findbugs-annotations"       % "3.0.1",
@@ -43,6 +41,8 @@ lazy val root = project
       "org.slf4j"                        % "slf4j-api"                  % "1.7.36",
       "org.slf4j"                        % "slf4j-simple"               % "1.7.36",
       "com.github.pureconfig"           %% "pureconfig-generic-scala3"  % "0.17.8",
+      "org.tpolecat"                    %% "skunk-core"                 % "0.6.4",
+      "org.typelevel"                   %% "cats-core"                  % "2.12.0",
       "org.scalikejdbc"                 %% "scalikejdbc"                % "4.3.+",
       "org.scalameta"                   %% "munit"                      % "1.0.0" % Test
     )
