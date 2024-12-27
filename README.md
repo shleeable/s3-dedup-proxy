@@ -8,13 +8,13 @@ Added a docker-compose to be able to play with it.
 The `--build` ensure that the image is up to date (In case of `Could not connect to 127.0.0.1:3306` error just retry, the DB was just not completely up).
 
 ```bash
-> docker compose up --build Jortage
+> docker compose up --build S3DedupProxy
 ```
 
 This will run three services:
 
-- `Jortage`: the proxy itself (bind 23278, 23279 and 23290)
-- `Mariadb`: the database to store the file metadata (binded on 3306)
+- `S3DedupProxy`: the proxy itself (bind 23278, 23279 and 23290)
+- `Postgres`: the database to store the file metadata (binded on 3306)
 - `S3Proxy`: used as local S3 store (binded on 8080)
 
 You will need to create the `blobs` bucket in the `S3Proxy` store, since it's run without authentication it can be done with `curl`:
@@ -29,7 +29,7 @@ You can then interact with the proxy and store using [MinIO client](https://min.
 {
     "version": "10",
     "aliases": {
-        "jortage": {
+        "proxy": {
             "url": "http://127.0.0.1:23278",
             "accessKey": "test",
             "secretKey": "ff54fae017ebe20356223ea016d1e2e867b7f73aaba775fe48ed65d1f1fecb87",

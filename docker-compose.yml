@@ -1,7 +1,7 @@
 services:
-  Jortage:
-    container_name: jortage_poolmgr
-    image: jortage_poolmgr
+  S3DedupProxy:
+    container_name: s3dedupproxy_proxy
+    image: s3dedupproxy_poolmgr
     network_mode: "host"
     build:
       context: .
@@ -10,27 +10,25 @@ services:
       - "s3.lan:127.0.0.1"
       - "mastodon.s3.lan:127.0.0.1"
     depends_on:
-      - Mariadb
+      - Postgres
       - S3Proxy
 
-  Mariadb:
-    container_name: jortage_mariadb
-    image: mariadb:11.2.4
+  Postgres:
+    container_name: s3dedupproxy_postgres
+    image: postgres:17.2
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      start_period: 10s
-      interval: 10s
-      timeout: 5s
+      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      start_period: 20s
+      interval: 30s
     ports:
-      - 3306:3306
+      - 5432:5432
     environment:
-      - MARIADB_ROOT_PASSWORD=jortage
-      - MARIADB_USER=jortage
-      - MARIADB_PASSWORD=password
-      - MARIADB_DATABASE=jortage
+      - POSTGRES_USER=s3proxy
+      - POSTGRES_PASSWORD=s3proxy
+      - POSTGRES_DB=s3proxy
 
   S3Proxy:
-    container_name: jortage_s3proxy
+    container_name: s3dedupproxy_s3proxy
     image: andrewgaul/s3proxy
     ports:
       - 8080:80
