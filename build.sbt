@@ -36,5 +36,8 @@ lazy val root = project
     libraryDependencies += "org.slf4j" % "slf4j-api" % "1.7.36",
     libraryDependencies += "org.slf4j" % "slf4j-simple" % "1.7.36",
 
-    libraryDependencies += "org.scalameta" %% "munit" % "1.0.0" % Test,
+    libraryDependencies += "org.tpolecat" %% "skunk-core" % "0.6.4",
+
+    libraryDependencies += "org.scalameta" %% "munit" % "1.1.0" % Test,
+    libraryDependencies += "org.typelevel" %% "munit-cats-effect" % "2.0.0" % Test,
   )
