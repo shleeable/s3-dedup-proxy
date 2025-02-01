@@ -44,6 +44,7 @@ lazy val root = project
       "org.tpolecat"                    %% "skunk-core"                 % "0.6.4",
       "org.typelevel"                   %% "cats-core"                  % "2.12.0",
       "org.scalikejdbc"                 %% "scalikejdbc"                % "4.3.+",
-      "org.scalameta"                   %% "munit"                      % "1.0.0" % Test
+      "org.scalameta"                   %% "munit"                      % "1.1.0" % Test,
+      "org.typelevel"                   %% "munit-cats-effect"          % "2.0.0" % Test,
     )
   )
