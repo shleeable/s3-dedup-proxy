@@ -149,8 +149,7 @@ public final class RivetHandler extends AbstractHandler {
 									}
 									hos.close();
 									HashCode hash = hos.hash();
-									String hashStr = hash.toString();
-									String path = Poolmgr.hashToPath(hashStr);
+									String path = Poolmgr.hashToPath(hash);
 									if (Queries.isMapped(Poolmgr.dataSource, hash)) {
 										results.put(url, new Pair<>(RivetResult.PRESENT, Temperature.COLD));
 									} else {
@@ -377,7 +376,7 @@ public final class RivetHandler extends AbstractHandler {
 							jsonError(res, 400, "Hash of body ("+realHash+") did not match hash in query ("+hash+")");
 							return;
 						}
-						Blob blob = Poolmgr.backingBlobStore.blobBuilder(Poolmgr.hashToPath(hash.toString()))
+						Blob blob = Poolmgr.backingBlobStore.blobBuilder(Poolmgr.hashToPath(hash))
 								.payload(bss.getSource())
 								.contentLength(bss.getSource().size())
 								.contentType(req.getContentType())

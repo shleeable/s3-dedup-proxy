@@ -68,7 +68,7 @@ public class JortageBlobStore extends ForwardingBlobStore {
 
 	private String getMapPath(String container, String name) {
 		checkContainer(container);
-		return Poolmgr.hashToPath(Queries.getMap(dataSource, container, name).toString());
+		return Poolmgr.hashToPath(Queries.getMap(dataSource, container, name));
 	}
 
 	private boolean isDump(String name) {
@@ -216,16 +216,18 @@ public class JortageBlobStore extends ForwardingBlobStore {
 				FileReprocessor.reprocess(is, hos);
 				hash = hos.hash();
 			}
-			String hashString = hash.toString();
+
 			try (Payload payload = new FilePayload(f)) {
+				String hash_path = Poolmgr.hashToPath(hash);
+
 				payload.getContentMetadata().setContentType(contentType);
-				BlobMetadata meta = delegate().blobMetadata(bucket, Poolmgr.hashToPath(hashString));
+				BlobMetadata meta = delegate().blobMetadata(bucket, hash_path);
 				if (meta != null) {
 					String etag = meta.getETag();
 					Queries.putMap(dataSource, identity, blobName, hash);
 					return etag;
 				}
-				Blob blob2 = blobBuilder(Poolmgr.hashToPath(hashString))
+				Blob blob2 = blobBuilder(hash_path)
 						.payload(payload)
 						.userMetadata(blob.getMetadata().getUserMetadata())
 						.build();
@@ -260,7 +262,7 @@ public class JortageBlobStore extends ForwardingBlobStore {
 		// javadoc says options are ignored, so we ignore them too
 		HashCode hash = Queries.getMap(dataSource, identity, fromName);
 		Queries.putMap(dataSource, identity, toName, hash);
-		return blobMetadata(bucket, Poolmgr.hashToPath(hash.toString())).getETag();
+		return blobMetadata(bucket, Poolmgr.hashToPath(hash)).getETag();
 	}
 
 	@Override
@@ -316,8 +318,7 @@ public class JortageBlobStore extends ForwardingBlobStore {
 				HashingOutputStream hos = new HashingOutputStream(Hashing.sha512(), counter);
 				FileReprocessor.reprocess(stream, hos);
 				HashCode hash = hos.hash();
-				String hashStr = hash.toString();
-				String path = Poolmgr.hashToPath(hashStr);
+				String path = Poolmgr.hashToPath(hash);
 				// we're about to do a bunch of stuff at once
 				// sleep so we don't fall afoul of request rate limits
 				// (causes intermittent 429s on at least DigitalOcean)
@@ -402,8 +403,7 @@ public class JortageBlobStore extends ForwardingBlobStore {
 		if (Queries.removeMap(dataSource, identity, name)) {
 			int rc = Queries.getMapCount(dataSource, hc);
 			if (rc == 0) {
-				String hashString = hc.toString();
-				String path = Poolmgr.hashToPath(hashString);
+				String path = Poolmgr.hashToPath(hc);
 				delegate().removeBlob(bucket, path);
 				Queries.removeFilesize(dataSource, hc);
 				Queries.removePendingBackup(dataSource, hc);

@@ -156,7 +156,7 @@ public class Poolmgr {
 									try (ResultSet rs = ps.executeQuery()) {
 										while (rs.next()) {
 											byte[] bys = rs.getBytes("hash");
-											String path = hashToPath(HashCode.fromBytes(bys).toString());
+											String path = hashToPath(HashCode.fromBytes(bys));
 											Blob src = backingBlobStore.getBlob(bucket, path);
 											if (src == null) {
 												Blob actualSrc = backingBackupBlobStore.getBlob(backupBucket, path);
@@ -243,7 +243,8 @@ public class Poolmgr {
 		}
 	}
 
-	public static String hashToPath(String hash) {
+	public static String hashToPath(HashCode hc) {
+		String hash = hc.toString();
 		return "blobs/"+hash.substring(0, 1)+"/"+hash.substring(1, 4)+"/"+hash;
 	}
 

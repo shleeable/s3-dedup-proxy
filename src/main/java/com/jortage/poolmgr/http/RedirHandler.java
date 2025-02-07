@@ -99,7 +99,7 @@ public final class RedirHandler extends AbstractHandler {
 					String b64 = B64URLNP.encode(hash.asBytes());
 					response.setHeader("Location", publicHost+"/blob2/"+b64.substring(0, 16)+"/"+b64.substring(16, b64.length()-8)+"/"+b64.substring(b64.length()-8)+ext);
 				} else {
-					response.setHeader("Location", publicHost+"/"+Poolmgr.hashToPath(hash.toString()));
+					response.setHeader("Location", publicHost+"/"+Poolmgr.hashToPath(hash));
 				}
 				response.setStatus(301);
 			} catch (IllegalArgumentException e) {
