@@ -1,7 +1,9 @@
 
-This is a forl of https://github.com/jortage/poolmgr
+This is a fork of https://github.com/jortage/poolmgr
 
-Added a docker-compose to be able to play with it.
+:warning: Currently broken, in the process of adding DB migration and switching to Postgres. :warning:
+\
+For a working docker compose to test the proxy see: https://github.com/Timshel/jortage-poolmgr
 
 ## Usage
 
