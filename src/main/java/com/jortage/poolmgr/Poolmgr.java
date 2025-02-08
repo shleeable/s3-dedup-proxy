@@ -98,7 +98,7 @@ public class Poolmgr {
 					return Maps.immutableEntry(secret,
 							new JortageBlobStore(backingBlobStore, dumpsStore, config.backend().bucket(), identity, dataSource));
 				} else {
-					throw new RuntimeException("Access denied");
+					throw new SecurityException("Access denied");
 				}
 			});
 	
