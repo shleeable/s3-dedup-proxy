@@ -51,7 +51,7 @@ case class Database(
 
   val countMappingQ: Query[HashCode, Int] =
     sql"""
-      SELECT COUNT(1) FROM file_mapping WHERE hash = $hashE
+      SELECT COUNT(1) FROM file_mappings WHERE hash = $hashE
     """.query(int4)
 
   def countMappings(hash: HashCode): Int =
