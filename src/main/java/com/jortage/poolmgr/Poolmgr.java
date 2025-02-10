@@ -49,7 +49,6 @@ import timshel.s3dedupproxy.GlobalConfig;
 
 public class Poolmgr {
 
-	private static final File configFile = new File("config.jkson");
 	public static BlobStore backingBlobStore, backingBackupBlobStore, dumpsStore;
 	public static DataSource dataSource;
 	public static Map<String, String> users;
