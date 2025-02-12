@@ -15,7 +15,7 @@ lazy val root = project
       "-language:higherKinds"
     ),
     javaOptions += "-Duser.timezone=UTC",
-    Compile / mainClass := Some("main"),
+    Compile / mainClass := Some("timshel.s3dedupproxy.Application"),
     unmanagedSources / excludeFilter := HiddenFileFilter
       || "EncryptedBlobStore.java"
       || "S3ProxyExtension.java"

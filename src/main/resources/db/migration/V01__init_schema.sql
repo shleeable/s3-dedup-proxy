@@ -4,7 +4,7 @@ CREATE TABLE file_mappings(
         uuid            UUID NOT NULL DEFAULT uuid_generate_v4(),
         user_name       TEXT NOT NULL,
         file_key        TEXT NOT NULL,
-        hash            BINARY(64) NOT NULL,
+        hash            bytea NOT NULL,
 
         created         TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
         updated         TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
@@ -30,7 +30,7 @@ CREATE UNIQUE INDEX multipart_uploads_forward  on multipart_uploads(user_name, f
 CREATE INDEX multipart_uploads_reverse  on multipart_uploads(tempfile);
 
 CREATE TABLE file_metadata(
-        hash BINARY(64) NOT NULL,
+        hash bytea      NOT NULL,
         size BIGINT     NOT NULL,
 
         created         TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
@@ -40,9 +40,10 @@ CREATE TABLE file_metadata(
 );
 
 CREATE TABLE pending_backup(
-        hash BINARY(64) NOT NULL,
+        hash bytea      NOT NULL,
 
         created         TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
 
         PRIMARY KEY (hash)
 );
+

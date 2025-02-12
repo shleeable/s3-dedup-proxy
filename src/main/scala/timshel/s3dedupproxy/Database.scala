@@ -1,3 +1,5 @@
+package timshel.s3dedupproxy
+
 import cats.effect._
 import cats.effect.unsafe.IORuntime
 import skunk._
@@ -18,16 +20,18 @@ case class Database(
     sql"""
       SELECT hash FROM file_mappings
         WHERE user_name = $text
-        AND file_key = $text"
+        AND file_key = $text
     """.query(hashD)
 
-  def getMappingHash(user_name: String, file_key: String): Option[HashCode] =
+  def getMappingHash(user_name: String, file_key: String): IO[Option[HashCode]] =
     session
       .prepare(mappingHashQ)
       .flatMap { ps =>
         ps.option(user_name, file_key)
       }
-      .unsafeRunSync()
+
+  def getMappingHashU(user_name: String, file_key: String): Option[HashCode] =
+    getMappingHash(user_name, file_key).unsafeRunSync()
 
   val putMappingC: Command[(String, String, HashCode, HashCode)] =
     sql"""
@@ -35,100 +39,114 @@ case class Database(
         ON CONFLICT (user_name, file_key) DO UPDATE SET hash = $hashE, updated = now();
     """.command
 
-  def putMapping(user_name: String, file_key: String, hash: HashCode): Completion = {
+  def putMapping(user_name: String, file_key: String, hash: HashCode): IO[Completion] = {
     session
       .prepare(putMappingC)
       .flatMap { pc =>
         pc.execute(user_name, file_key, hash, hash)
       }
-      .unsafeRunSync()
   }
+
+  def putMappingU(user_name: String, file_key: String, hash: HashCode): Completion =
+    putMapping(user_name, file_key, hash).unsafeRunSync()
 
   val delMappingC: Command[(String, String)] =
     sql"""
       DELETE FROM file_mappings WHERE user_name = $text AND file_key = $text
     """.command
 
-  def delMapping(user_name: String, file_key: String): Completion = {
+  def delMapping(user_name: String, file_key: String): IO[Completion] = {
     session
       .prepare(delMappingC)
       .flatMap { pc =>
         pc.execute(user_name, file_key)
       }
-      .unsafeRunSync()
   }
 
-  val countMappingQ: Query[HashCode, Int] =
+  def delMappingU(user_name: String, file_key: String): Completion =
+    delMapping(user_name, file_key).unsafeRunSync()
+
+  val countMappingQ: Query[HashCode, Long] =
     sql"""
       SELECT COUNT(1) FROM file_mappings WHERE hash = $hashE
-    """.query(int4)
+    """.query(int8)
 
-  def countMappings(hash: HashCode): Int =
+  def countMappings(hash: HashCode): IO[Long] =
     session
       .prepare(countMappingQ)
       .flatMap { ps =>
         ps.unique(hash)
       }
-      .unsafeRunSync()
 
-  def isMapped(hash: HashCode): Boolean = countMappings(hash) > 0
+  def countMappingsU(hash: HashCode): Long =
+    countMappings(hash).unsafeRunSync()
 
-  val putMetadataC: Command[(String, Long, Long)] =
+  def isMapped(hash: HashCode): Boolean = countMappingsU(hash) > 0
+
+  val putMetadataC: Command[(HashCode, Long, Long)] =
     sql"""
-      INSERT INTO file_metadata (file_key, size) VALUES ($text, $int8)
-        ON CONFLICT (file_key) DO UPDATE SET size = $int8, updated = now();
+      INSERT INTO file_metadata (hash, size) VALUES ($hashE, $int8)
+        ON CONFLICT (hash) DO UPDATE SET size = $int8, updated = now();
     """.command
 
-  def putMetadata(file_key: String, size: Long): Completion = {
+  def putMetadata(hash: HashCode, size: Long): IO[Completion] = {
     session
       .prepare(putMetadataC)
       .flatMap { pc =>
-        pc.execute(file_key, size, size)
+        pc.execute(hash, size, size)
       }
-      .unsafeRunSync()
   }
 
-  val delMetadataC: Command[String] =
+  def putMetadataU(hash: HashCode, size: Long): Completion =
+    putMetadata(hash, size).unsafeRunSync()
+
+  val delMetadataC: Command[HashCode] =
     sql"""
-      DELETE FROM file_metadata WHERE file_key = $text
+      DELETE FROM file_metadata WHERE hash = $hashE
     """.command
 
-  def delMetadata(file_key: String): Completion = {
+  def delMetadata(hash: HashCode): IO[Completion] = {
     session
       .prepare(delMetadataC)
       .flatMap { pc =>
-        pc.execute(file_key)
+        pc.execute(hash)
       }
-      .unsafeRunSync()
   }
+
+  def delMetadataU(hash: HashCode): Completion =
+    delMetadata(hash).unsafeRunSync()
 
   val putPendingC: Command[HashCode] =
     sql"""
       INSERT INTO pending_backup (hash) VALUES ($hashE)
     """.command
 
-  def putPending(hash: HashCode): Completion = {
+  def putPending(hash: HashCode): IO[Completion] = {
     session
       .prepare(putPendingC)
       .flatMap { pc =>
         pc.execute(hash)
       }
-      .unsafeRunSync()
   }
+
+  def putPendingU(hash: HashCode): Completion =
+    putPending(hash).unsafeRunSync()
 
   val delPendingC: Command[HashCode] =
     sql"""
       DELETE FROM pending_backup WHERE hash = $hashE
     """.command
 
-  def delPending(hash: HashCode): Completion = {
+  def delPending(hash: HashCode): IO[Completion] = {
     session
       .prepare(delPendingC)
       .flatMap { pc =>
         pc.execute(hash)
       }
-      .unsafeRunSync()
   }
+
+  def delPendingU(hash: HashCode): Completion =
+    delPending(hash).unsafeRunSync()
 
   val putMultipartC: Command[(String, String, String, String)] =
     sql"""
@@ -136,55 +154,63 @@ case class Database(
         ON CONFLICT (user_name, file_key) DO UPDATE SET tempfile = $text, updated = now();
     """.command
 
-  def putMultipart(user_name: String, file_key: String, temp_file: String): Completion = {
+  def putMultipart(user_name: String, file_key: String, temp_file: String): IO[Completion] = {
     session
       .prepare(putMultipartC)
       .flatMap { pc =>
         pc.execute(user_name, file_key, temp_file, temp_file)
       }
-      .unsafeRunSync()
   }
+
+  def putMultipartU(user_name: String, file_key: String, temp_file: String): Completion =
+    putMultipart(user_name, file_key, temp_file).unsafeRunSync()
 
   val multipartFileQ: Query[String ~ String, String] =
     sql"""
       SELECT tempfile FROM multipart_uploads
         WHERE user_name = $text
-        AND file_key = $text"
+        AND file_key = $text
     """.query(text)
 
-  def getMultipartFile(user_name: String, file_key: String): Option[String] =
+  def getMultipartFile(user_name: String, file_key: String): IO[Option[String]] =
     session
       .prepare(multipartFileQ)
       .flatMap { ps =>
         ps.option(user_name, file_key)
       }
-      .unsafeRunSync()
+
+  def getMultipartFileU(user_name: String, file_key: String): Option[String] =
+    getMultipartFile(user_name, file_key).unsafeRunSync()
 
   val multipartKeyQ: Query[String, String] =
     sql"""
       SELECT file_key FROM multipart_uploads WHERE tempfile = $text
     """.query(text)
 
-  def getMultipartKey(tempfile: String): Option[String] =
+  def getMultipartKey(tempfile: String): IO[Option[String]] =
     session
       .prepare(multipartKeyQ)
       .flatMap { ps =>
         ps.option(tempfile)
       }
-      .unsafeRunSync()
+
+  def getMultipartKeyU(tempfile: String): Option[String] =
+    getMultipartKey(tempfile).unsafeRunSync()
 
   val delMultipartC: Command[String] =
     sql"""
       DELETE FROM multipart_uploads WHERE tempfile = $text
     """.command
 
-  def delMultipart(tempfile: String): Completion = {
+  def delMultipart(tempfile: String): IO[Completion] = {
     session
       .prepare(delMultipartC)
       .flatMap { pc =>
         pc.execute(tempfile)
       }
-      .unsafeRunSync()
   }
+
+  def delMultipartU(tempfile: String): Completion =
+    delMultipart(tempfile).unsafeRunSync()
 
 }

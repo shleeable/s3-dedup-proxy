@@ -1,7 +1,74 @@
+import cats.effect._
+import timshel.s3dedupproxy.Application
 import munit.CatsEffectSuite
 
+import com.google.common.hash.HashCode;
+
 class PgIntegrationTests extends CatsEffectSuite {
-  test("Query is run against db") {
-    assertIO(Db.selectId(), List.empty)
+
+  val app = ResourceSuiteLocalFixture(
+    "application",
+    Application.default().evalMap { a =>
+      a.migrate().map { mr => a }
+    }
+  )
+
+  override def munitFixtures = List(app)
+
+  def use[T](f: Application => IO[T]): IO[T] = {
+    IO(app()).flatMap(f)
   }
+
+  test("Query file_mappings run against db") {
+    use { a =>
+      val hashCode = HashCode.fromInt(12);
+
+      for {
+        _ <- a.database.putMapping("A", "B", hashCode)
+        _ <- a.database.putMapping("A", "B", hashCode)
+        _ <- assertIO(a.database.getMappingHash("A", "B"), Some(hashCode))
+        _ <- assertIO(a.database.countMappings(hashCode), 1L)
+        _ <- a.database.delMapping("A", "B")
+        _ <- assertIO(a.database.countMappings(hashCode), 0L)
+      } yield ()
+    }
+  }
+
+  test("Query file_metadata run against db") {
+    use { a =>
+      val hashCode = HashCode.fromInt(12);
+
+      for {
+        _ <- a.database.putMetadata(hashCode, 10L)
+        _ <- a.database.putMetadata(hashCode, 12L)
+        _ <- a.database.delMetadata(hashCode)
+      } yield ()
+    }
+  }
+
+  test("Query pending_backup run against db") {
+    use { a =>
+      val hashCode = HashCode.fromInt(12);
+
+      for {
+        _ <- a.database.putPending(hashCode)
+        _ <- a.database.delPending(hashCode)
+      } yield ()
+    }
+  }
+
+  test("Query multipart_uploads run against db") {
+    use { a =>
+      val hashCode = HashCode.fromInt(12);
+
+      for {
+        _ <- a.database.putMultipart("toto", "file_key", "temp_file")
+        _ <- assertIO(a.database.getMultipartFile("toto", "file_key"), Some("temp_file"))
+        _ <- assertIO(a.database.getMultipartKey("temp_file"), Some("file_key"))
+        _ <- a.database.delMultipart("temp_file")
+        _ <- assertIO(a.database.getMultipartKey("temp_file"), None)
+      } yield ()
+    }
+  }
+
 }
