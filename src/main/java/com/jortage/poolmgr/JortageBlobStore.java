@@ -1,10 +1,12 @@
 package com.jortage.poolmgr;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -211,7 +213,7 @@ public class JortageBlobStore extends ForwardingBlobStore {
 			String contentType = blob.getPayload().getContentMetadata().getContentType();
 			HashCode hash;
 			try (InputStream is = blob.getPayload().openStream();
-					FileOutputStream fos = Files.newOutputStream(Paths.get(f))) {
+				OutputStream fos = Files.newOutputStream(Paths.get(f.toURI()))) {
 				HashingOutputStream hos = new HashingOutputStream(Hashing.sha512(), fos);
 				FileReprocessor.reprocess(is, hos);
 				hash = hos.hash();
