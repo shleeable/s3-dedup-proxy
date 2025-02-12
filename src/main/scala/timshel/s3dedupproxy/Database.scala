@@ -8,8 +8,8 @@ import skunk.codec.all._
 import com.google.common.hash.HashCode;
 
 case class Database(
-  session: Session[IO]
-)(implicit runtime: IORuntime){
+    session: Session[IO]
+)(implicit runtime: IORuntime) {
 
   val hashD: Decoder[HashCode] = bytea.map(HashCode.fromBytes(_))
   val hashE: Encoder[HashCode] = bytea.contramap(_.asBytes())
@@ -22,9 +22,12 @@ case class Database(
     """.query(hashD)
 
   def getMappingHash(user_name: String, file_key: String): Option[HashCode] =
-    session.prepare(mappingHashQ).flatMap { ps =>
-      ps.option(user_name, file_key)
-    }.unsafeRunSync()
+    session
+      .prepare(mappingHashQ)
+      .flatMap { ps =>
+        ps.option(user_name, file_key)
+      }
+      .unsafeRunSync()
 
   val putMappingC: Command[(String, String, HashCode, HashCode)] =
     sql"""
@@ -33,9 +36,12 @@ case class Database(
     """.command
 
   def putMapping(user_name: String, file_key: String, hash: HashCode): Completion = {
-    session.prepare(putMappingC).flatMap { pc =>
-      pc.execute(user_name, file_key, hash, hash)
-    }.unsafeRunSync()
+    session
+      .prepare(putMappingC)
+      .flatMap { pc =>
+        pc.execute(user_name, file_key, hash, hash)
+      }
+      .unsafeRunSync()
   }
 
   val delMappingC: Command[(String, String)] =
@@ -44,9 +50,12 @@ case class Database(
     """.command
 
   def delMapping(user_name: String, file_key: String): Completion = {
-    session.prepare(delMappingC).flatMap { pc =>
-      pc.execute(user_name, file_key)
-    }.unsafeRunSync()
+    session
+      .prepare(delMappingC)
+      .flatMap { pc =>
+        pc.execute(user_name, file_key)
+      }
+      .unsafeRunSync()
   }
 
   val countMappingQ: Query[HashCode, Int] =
@@ -55,9 +64,12 @@ case class Database(
     """.query(int4)
 
   def countMappings(hash: HashCode): Int =
-    session.prepare(countMappingQ).flatMap { ps =>
-      ps.unique(hash)
-    }.unsafeRunSync()
+    session
+      .prepare(countMappingQ)
+      .flatMap { ps =>
+        ps.unique(hash)
+      }
+      .unsafeRunSync()
 
   def isMapped(hash: HashCode): Boolean = countMappings(hash) > 0
 
@@ -68,9 +80,12 @@ case class Database(
     """.command
 
   def putMetadata(file_key: String, size: Long): Completion = {
-    session.prepare(putMetadataC).flatMap { pc =>
-      pc.execute(file_key, size, size)
-    }.unsafeRunSync()
+    session
+      .prepare(putMetadataC)
+      .flatMap { pc =>
+        pc.execute(file_key, size, size)
+      }
+      .unsafeRunSync()
   }
 
   val delMetadataC: Command[String] =
@@ -79,9 +94,12 @@ case class Database(
     """.command
 
   def delMetadata(file_key: String): Completion = {
-    session.prepare(delMetadataC).flatMap { pc =>
-      pc.execute(file_key)
-    }.unsafeRunSync()
+    session
+      .prepare(delMetadataC)
+      .flatMap { pc =>
+        pc.execute(file_key)
+      }
+      .unsafeRunSync()
   }
 
   val putPendingC: Command[HashCode] =
@@ -90,9 +108,12 @@ case class Database(
     """.command
 
   def putPending(hash: HashCode): Completion = {
-    session.prepare(putPendingC).flatMap { pc =>
-      pc.execute(hash)
-    }.unsafeRunSync()
+    session
+      .prepare(putPendingC)
+      .flatMap { pc =>
+        pc.execute(hash)
+      }
+      .unsafeRunSync()
   }
 
   val delPendingC: Command[HashCode] =
@@ -101,9 +122,12 @@ case class Database(
     """.command
 
   def delPending(hash: HashCode): Completion = {
-    session.prepare(delPendingC).flatMap { pc =>
-      pc.execute(hash)
-    }.unsafeRunSync()
+    session
+      .prepare(delPendingC)
+      .flatMap { pc =>
+        pc.execute(hash)
+      }
+      .unsafeRunSync()
   }
 
   val putMultipartC: Command[(String, String, String, String)] =
@@ -113,9 +137,12 @@ case class Database(
     """.command
 
   def putMultipart(user_name: String, file_key: String, temp_file: String): Completion = {
-    session.prepare(putMultipartC).flatMap { pc =>
-      pc.execute(user_name, file_key, temp_file, temp_file)
-    }.unsafeRunSync()
+    session
+      .prepare(putMultipartC)
+      .flatMap { pc =>
+        pc.execute(user_name, file_key, temp_file, temp_file)
+      }
+      .unsafeRunSync()
   }
 
   val multipartFileQ: Query[String ~ String, String] =
@@ -126,9 +153,12 @@ case class Database(
     """.query(text)
 
   def getMultipartFile(user_name: String, file_key: String): Option[String] =
-    session.prepare(multipartFileQ).flatMap { ps =>
-      ps.option(user_name, file_key)
-    }.unsafeRunSync()
+    session
+      .prepare(multipartFileQ)
+      .flatMap { ps =>
+        ps.option(user_name, file_key)
+      }
+      .unsafeRunSync()
 
   val multipartKeyQ: Query[String, String] =
     sql"""
@@ -136,9 +166,12 @@ case class Database(
     """.query(text)
 
   def getMultipartKey(tempfile: String): Option[String] =
-    session.prepare(multipartKeyQ).flatMap { ps =>
-      ps.option(tempfile)
-    }.unsafeRunSync()
+    session
+      .prepare(multipartKeyQ)
+      .flatMap { ps =>
+        ps.option(tempfile)
+      }
+      .unsafeRunSync()
 
   val delMultipartC: Command[String] =
     sql"""
@@ -146,9 +179,12 @@ case class Database(
     """.command
 
   def delMultipart(tempfile: String): Completion = {
-    session.prepare(delMultipartC).flatMap { pc =>
-      pc.execute(tempfile)
-    }.unsafeRunSync()
+    session
+      .prepare(delMultipartC)
+      .flatMap { pc =>
+        pc.execute(tempfile)
+      }
+      .unsafeRunSync()
   }
 
 }
