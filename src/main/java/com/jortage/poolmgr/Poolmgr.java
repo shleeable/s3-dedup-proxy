@@ -236,12 +236,6 @@ public class Poolmgr {
 			.getBlobStore();
 	}
 
-	private static void execOneshot(Connection c, String sql) throws SQLException {
-		try (Statement s = c.createStatement()) {
-			s.execute(sql);
-		}
-	}
-
 	public static String hashToPath(HashCode hc) {
 		String hash = hc.toString();
 		return "blobs/"+hash.substring(0, 1)+"/"+hash.substring(1, 4)+"/"+hash;
