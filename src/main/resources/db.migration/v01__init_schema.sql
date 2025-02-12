@@ -27,7 +27,7 @@ CREATE TABLE multipart_uploads(
         PRIMARY KEY (uuid)
 );
 CREATE UNIQUE INDEX multipart_uploads_forward  on multipart_uploads(user_name, file_key);
-CREATE INDEX multipart_uploads_reverse  on multipart_uploads(hash);
+CREATE INDEX multipart_uploads_reverse  on multipart_uploads(tempfile);
 
 CREATE TABLE file_metadata(
         hash BINARY(64) NOT NULL,
