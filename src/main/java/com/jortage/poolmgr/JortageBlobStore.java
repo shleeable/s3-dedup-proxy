@@ -242,7 +242,12 @@ public class JortageBlobStore extends ForwardingBlobStore {
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		} finally {
-			if (tempFile != null) tempFile.delete();
+			if (tempFile != null) 
+		                try {
+					Files.deleteIfExists(tempFile.toPath());
+		                } catch (IOException e) {
+					System.err.println("Failed to delete temp file: " + tempFile.getAbsolutePath());
+		                }
 			synchronized (Poolmgr.provisionalMaps) {
 				Poolmgr.provisionalMaps.remove(identity, blobName);
 			}
