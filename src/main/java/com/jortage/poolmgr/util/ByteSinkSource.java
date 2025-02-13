@@ -20,6 +20,9 @@ public interface ByteSinkSource extends Closeable {
      */
     ByteSource getSource();
 
+    /**
+     * Closes this resource, releasing any underlying resources if necessary.
+     */    
     @Override
     void close();
 }
