@@ -143,6 +143,76 @@ public class Poolmgr {
     }
 
     /**
+     * Registers a signal handler for automated backups.
+     */
+    private static void registerBackupHandler(GlobalConfig config) {
+        System.err.print("Registering SIGALRM handler for backups... ");
+        try {
+            Signal.handle(new Signal("ALRM"), (sig) -> {
+                if (backingUp) {
+                    System.err.println("Ignoring SIGALRM, backup already in progress");
+                    return;
+                }
+                if (backingBackupBlobStore == null) {
+                    System.err.println("Ignoring SIGALRM, nowhere to backup to");
+                    return;
+                }
+                new Thread(() -> {
+                    performBackup(config);
+                }, "Backup thread").start();
+            });
+            System.err.println("done");
+        } catch (Exception e) {
+            System.err.println("failed");
+        }
+    }
+
+    /**
+     * Performs the backup operation.
+     */
+    private static void performBackup(GlobalConfig config) {
+        int count = 0;
+        Stopwatch sw = Stopwatch.createStarted();
+        try (Connection c = dataSource.getConnection()) {
+            backingUp = true;
+            String bucket = config.backend().bucket();
+            String backupBucket = config.backupBackend().get().bucket();
+            
+            try (PreparedStatement delete = c.prepareStatement("DELETE FROM `pending_backup` WHERE `hash` = ?;");
+                 PreparedStatement ps = c.prepareStatement("SELECT `hash` FROM `pending_backup`;");
+                 ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    byte[] bys = rs.getBytes("hash");
+                    String path = hashToPath(HashCode.fromBytes(bys));
+                    Blob src = backingBlobStore.getBlob(bucket, path);
+                    
+                    if (src == null) {
+                        Blob actualSrc = backingBackupBlobStore.getBlob(backupBucket, path);
+                        if (actualSrc == null) {
+                            System.err.println("Can't find blob " + path + " in source or destination?");
+                            continue;
+                        } else {
+                            System.err.println("Copying " + path + " from backup to current");
+                            backingBlobStore.putBlob(bucket, actualSrc, new PutOptions().setBlobAccess(BlobAccess.PUBLIC_READ));
+                        }
+                    } else {
+                        backingBackupBlobStore.putBlob(backupBucket, src, new PutOptions().setBlobAccess(BlobAccess.PUBLIC_READ));
+                    }
+                    delete.setBytes(1, bys);
+                    delete.executeUpdate();
+                    count++;
+                }
+                System.err.println("Backup of " + count + " items successful in " + sw);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.err.println("Backup failed after " + count + " items in " + sw);
+        } finally {
+            backingUp = false;
+        }
+    }
+    
+    /**
      * Loads configuration settings and initializes blob stores.
      */
     private static void loadConfig(GlobalConfig config) {
@@ -171,4 +241,8 @@ public class Poolmgr {
                 .build(BlobStoreContext.class)
                 .getBlobStore();
     }
+
+
+    
 }
+
