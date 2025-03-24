@@ -1,5 +1,9 @@
 # Changelog
 
+##
+
+- Try to create the backing store bucket if missing
+
 ## 0.0.1
 
 Initial release

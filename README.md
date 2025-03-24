@@ -81,12 +81,6 @@ This will run three services:
 - `Postgres`: the database to store the file metadata (binded on 3306)
 - `S3Proxy`: used as local S3 store (binded on 8080)
 
-You will need to create the `mastodon` bucket in the `S3Proxy` store, since it's run without authentication it can be done with `curl`:
-
-```bash
-curl --request PUT http://127.0.0.1:8080/mastodon
-```
-
 You can then interact with the proxy and store using [MinIO client](https://min.io/docs/minio/linux/reference/minio-mc.html).
 
 ```config

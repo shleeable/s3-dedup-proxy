@@ -74,7 +74,7 @@ object ProxyBlobStore {
     val overrides = new java.util.Properties()
     overrides.setProperty(org.jclouds.s3.reference.S3Constants.PROPERTY_S3_VIRTUAL_HOST_BUCKETS, conf.virtualHost.toString());
 
-    ContextBuilder
+    val blobStore = ContextBuilder
       .newBuilder(if ("s3".equals(conf.protocol)) "aws-s3" else conf.protocol)
       .credentials(conf.accessKeyId, conf.secretAccessKey)
       .modules(ImmutableList.of(new org.jclouds.logging.slf4j.config.SLF4JLoggingModule()))
@@ -82,6 +82,12 @@ object ProxyBlobStore {
       .overrides(overrides)
       .build(classOf[org.jclouds.blobstore.BlobStoreContext])
       .getBlobStore()
+
+    if (!blobStore.containerExists(conf.bucket)) {
+      blobStore.createContainerInLocation(null, conf.bucket)
+    }
+
+    blobStore
   }
 
   /** S3Proxy will throw if it sees an X-Amz header it doesn't recognize
