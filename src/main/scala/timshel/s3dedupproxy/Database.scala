@@ -298,7 +298,7 @@ case class Database(
       bucket: String,
       prefix: Option[String] = None,
       marker: Option[String] = None,
-      maxResults: Option[Int] = None,
+      maxResults: Option[Int] = None
   ): IO[(List[Mapping], Option[String])] = {
     val after = marker.getOrElse("")
     val pre   = prefix.getOrElse("")

@@ -29,9 +29,8 @@ object RedirectionController {
   val log = com.typesafe.scalalogging.Logger(classOf[RedirectionController])
 }
 
-
 case class ApiController(
-  cleanup: Cleanup
+    cleanup: Cleanup
 ) {
   import RedirectionController._
 

@@ -35,7 +35,8 @@ object Application extends IOApp {
         case Left(e)       => throw new RuntimeException(e.prettyPrint());
         case Right(config) => config
       }
-    }.toResource.flatMap(cs => using(cs))
+    }.toResource
+      .flatMap(cs => using(cs))
   }
 
   def using(config: GlobalConfig): Resource[IO, Application] = {
@@ -52,12 +53,12 @@ object Application extends IOApp {
       )
       database = Database(pool)(runtime)
       dispatcher <- Dispatcher.parallel[IO]
-      proxy   <- ProxyBlobStore.createProxy(config, database, dispatcher)
-      cleanup <- Cleanup.scheduled(config, database, dispatcher)
+      proxy      <- ProxyBlobStore.createProxy(config, database, dispatcher)
+      cleanup    <- Cleanup.scheduled(config, database, dispatcher)
       httpApp = org.http4s.server
         .Router(
           "/proxy/" -> RedirectionController(config.backend, database).routes,
-          "/api/" -> ApiController(cleanup).routes
+          "/api/"   -> ApiController(cleanup).routes
         )
         .orNotFound
       http <- EmberServerBuilder
