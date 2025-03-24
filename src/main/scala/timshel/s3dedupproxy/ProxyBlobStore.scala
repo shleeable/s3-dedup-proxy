@@ -306,7 +306,11 @@ class ProxyBlobStore(
               val metadata = blob.getMetadata()
               metadata.setContainer(bucket)
               metadata.setName(ProxyBlobStore.hashToKey(hash))
-              delegate().putBlob(bucket, blob, new PutOptions().setBlobAccess(BlobAccess.PUBLIC_READ).multipart());
+              delegate().putBlob(
+                bucket,
+                blob,
+                new PutOptions().setBlobAccess(BlobAccess.PUBLIC_READ).multipart(size > 5 * 1024 * 1024)
+              );
             }
             _ <- db.putMetadata(hash, md5, size, eTag, contenType)
           } yield eTag

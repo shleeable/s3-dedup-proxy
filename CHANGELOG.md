@@ -1,7 +1,8 @@
 # Changelog
 
-##
+## 0.0.2
 
+ -Use multipart only for files over 5MB
 - Try to create the backing store bucket if missing
 
 ## 0.0.1
