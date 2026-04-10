@@ -79,14 +79,16 @@ case class Database(
   }
 
   def delMappings(mappings: List[(String, String, String)]): IO[Int] = {
-    pool.use {
-      _.prepare(delMappingsC(mappings.size))
-        .flatMap { pc => pc.execute(mappings) }
-        .map {
-          case Completion.Delete(count) => count
-          case _                        => throw new AssertionError("delMappings execution should only return Delete")
-        }
-    }
+    if (mappings.nonEmpty) {
+      pool.use {
+        _.prepare(delMappingsC(mappings.size))
+          .flatMap { pc => pc.execute(mappings) }
+          .map {
+            case Completion.Delete(count) => count
+            case _                        => throw new AssertionError("delMappings execution should only return Delete")
+          }
+      }
+    } else IO.pure(0)
   }
 
   def delMappingKeysC(count: Int): Command[(String, String, List[String])] = {
@@ -99,14 +101,16 @@ case class Database(
   }
 
   def delMappingKeys(user_name: String, bucket: String, keys: List[String]): IO[Int] = {
-    pool.use {
-      _.prepare(delMappingKeysC(keys.size))
-        .flatMap { pc => pc.execute(user_name, bucket, keys) }
-        .map {
-          case Completion.Delete(count) => count
-          case _                        => throw new AssertionError("delMappingKeys execution should only return Delete")
-        }
-    }
+    if (keys.nonEmpty) {
+      pool.use {
+        _.prepare(delMappingKeysC(keys.size))
+          .flatMap { pc => pc.execute(user_name, bucket, keys) }
+          .map {
+            case Completion.Delete(count) => count
+            case _                        => throw new AssertionError("delMappingKeys execution should only return Delete")
+          }
+      }
+    } else IO.pure(0)
   }
 
   def delMapping(user_name: String, bucket: String, file_key: String): IO[Int] =
