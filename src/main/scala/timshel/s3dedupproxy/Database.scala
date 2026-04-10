@@ -241,6 +241,7 @@ case class Database(
         FROM file_metadata
           LEFT JOIN file_mappings ON file_mappings.hash = file_metadata.hash
         WHERE file_mappings.uuid IS NULL
+          AND file_metadata.created < NOW() - INTERVAL '1 hour'
         ORDER BY file_metadata.created ASC
         LIMIT $int4
     """
