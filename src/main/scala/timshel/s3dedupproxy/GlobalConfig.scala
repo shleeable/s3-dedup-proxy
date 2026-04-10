@@ -23,7 +23,7 @@ case class Proxy(
     port: Port,
     purge: CronExpression
 ) derives ConfigReader {
-  val uri = URI.create(s"http://${host}:${port}")
+  val uri = new URI("http", null, host.toString, port.value, null, null, null)
 }
 
 case class DBConfig(
