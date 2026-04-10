@@ -4,6 +4,7 @@ import cats.effect.IO
 
 import org.http4s._
 import org.http4s.dsl.io._
+import org.http4s.headers.Location
 
 case class RedirectionController(
     config: BackendConfig,
@@ -20,7 +21,7 @@ case class RedirectionController(
       case None => IO.pure(Response[IO](Status.NotFound))
       case Some(hash) =>
         val path = ProxyBlobStore.hashToKey(hash)
-        PermanentRedirect(config.publicHost + "/" + path)
+        PermanentRedirect(Location(config.publicHost.addSegment(path)))
     }
   }
 }

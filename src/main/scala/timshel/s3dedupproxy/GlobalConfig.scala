@@ -2,6 +2,7 @@ package timshel.s3dedupproxy
 
 import com.comcast.ip4s.{Host, Port}
 import java.net.URI;
+import org.http4s.Uri;
 import org.quartz.CronExpression;
 import pureconfig.*
 import pureconfig.generic.semiauto.deriveReader
@@ -12,6 +13,9 @@ given portReader: ConfigReader[Port] = implicitly[ConfigReader[Int]].emap { p =>
   Port.fromInt(p).toRight(pureconfig.error.CannotConvert(p.toString, "Port", "Impossible"))
 }
 given cronReader: ConfigReader[CronExpression] = ConfigReader.fromStringTry { str => Try(org.quartz.CronExpression(str)) }
+given uriReader: ConfigReader[Uri] = implicitly[ConfigReader[String]].emap { s =>
+  Uri.fromString(s).left.map { _ => pureconfig.error.CannotConvert(s, "Uri", "Impossible") }
+}
 
 case class API(
     host: Host,
@@ -41,7 +45,7 @@ case class BackendConfig(
     accessKeyId: String,
     secretAccessKey: String,
     bucket: String,
-    publicHost: String
+    publicHost: Uri
 ) derives ConfigReader
 
 case class GlobalConfig(
