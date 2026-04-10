@@ -264,7 +264,7 @@ class ProxyBlobStore(
   override def putBlob(container: String, blob: Blob): String = {
     log.debug(s"putBlob($container, $blob)")
     val name       = blob.getMetadata().getName()
-    val contenType = blob.getMetadata().getContentMetadata().getContentType()
+    val contenType = Option(blob.getMetadata().getContentMetadata().getContentType()).getOrElse("application/octet-stream")
 
     val p = (for {
       _ <- ensureContainerExists(container)
@@ -381,7 +381,7 @@ class ProxyBlobStore(
 
     val container  = mpu.containerName()
     val name       = mpu.blobName()
-    val contenType = mpu.blobMetadata().getContentMetadata().getContentType()
+    val contenType = Option(mpu.blobMetadata().getContentMetadata().getContentType()).getOrElse("application/octet-stream")
 
     val p = (for {
       completed <- IO.blocking(bufferStore.completeMultipartUpload(mpu, parts))
