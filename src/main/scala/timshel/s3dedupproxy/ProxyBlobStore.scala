@@ -307,6 +307,7 @@ class ProxyBlobStore(
               val metadata = blob.getMetadata()
               metadata.setContainer(bucket)
               metadata.setName(ProxyBlobStore.hashToKey(hash))
+              metadata.getContentMetadata().setContentType(contenType)
               delegate().putBlob(
                 bucket,
                 blob,
