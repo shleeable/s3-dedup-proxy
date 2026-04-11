@@ -25,7 +25,7 @@ class PgIntegrationTests extends CatsEffectSuite {
         _ <- a.database.putMetadata(hashCode, hashCode, 10L, "A", "CT")
         _ <- a.database.putMetadata(hashCode, hashCode, 12L, "B", "CT")
         _ <- assertIO(a.database.getMetadata(hashCode), Some(Metadata(10L, "B", "CT")))
-        _ <- assertIO(a.database.getDangling(1000), List(hashCode))
+        _ <- assertIO(a.database.getDangling(1000), Nil) // Grace period prevents freshly created metadata from being dangling
         _ <- assertIO(a.database.delMetadata(hashCode), 1)
         _ <- a.database.putMetadata(hashCode, hashCode, 10L, "A", "CT")
         _ <- assertIO(a.database.delMetadatas(List(hashCode)), 1)
