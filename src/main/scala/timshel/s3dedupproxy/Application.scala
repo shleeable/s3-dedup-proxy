@@ -29,28 +29,35 @@ object Application extends IOApp {
     }
   }
 
-  def default(): Resource[IO, Application] = {
+  def config(): Resource[IO, GlobalConfig] = {
     IO.blocking {
       pureconfig.ConfigSource.default.load[GlobalConfig] match {
         case Left(e)       => throw new RuntimeException(e.prettyPrint());
         case Right(config) => config
       }
     }.toResource
-      .flatMap(cs => using(cs))
+  }
+
+  def default(): Resource[IO, Application] = {
+    config().flatMap(cs => using(cs))
+  }
+
+  def pool(config: GlobalConfig): Resource[IO, Resource[IO, Session[IO]]] = {
+    import natchez.Trace.Implicits.noop
+
+    Session.pooled[IO](
+      host = config.db.host.toString,
+      port = config.db.port.value,
+      user = config.db.user,
+      database = config.db.database,
+      password = Some(config.db.pass),
+      max = 10
+    )
   }
 
   def using(config: GlobalConfig): Resource[IO, Application] = {
-    import natchez.Trace.Implicits.noop
-
     (for {
-      pool <- Session.pooled[IO](
-        host = config.db.host.toString,
-        port = config.db.port.value,
-        user = config.db.user,
-        database = config.db.database,
-        password = Some(config.db.pass),
-        max = 10
-      )
+      pool       <- pool(config)
       database = Database(pool)(runtime)
       dispatcher <- Dispatcher.parallel[IO]
       proxy      <- ProxyBlobStore.createProxy(config, database, dispatcher)

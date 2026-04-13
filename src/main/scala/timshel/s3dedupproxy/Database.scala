@@ -202,34 +202,21 @@ case class Database(
         .flatMap { ps => ps.option(hashCode) }
     }
 
-  val delMetadataC: Command[HashCode] =
+  def delDanglingMetadatasC(count: Int): Command[(List[HashCode])] = {
     sql"""
-      DELETE FROM file_metadata WHERE hash = $hashE
-    """.command
-
-  def delMetadata(hash: HashCode): IO[Int] = {
-    pool.use {
-      _.prepare(delMetadataC)
-        .flatMap { pc =>
-          pc.execute(hash)
-        }
-        .map {
-          case Completion.Delete(count) => count
-          case _                        => throw new AssertionError("delMapping execution should only return Delete")
-        }
-    }
-  }
-
-  def delMetadatasC(count: Int): Command[(List[HashCode])] = {
-    sql"""
-      DELETE FROM file_metadata WHERE hash IN (${hashE.list(count)})
+      DELETE FROM file_metadata
+      USING file_metadata as fm
+      LEFT JOIN file_mappings AS map ON fm.hash = map.hash
+      WHERE file_metadata.hash = fm.hash
+        AND fm.hash IN (${hashE.list(count)})
+        AND map.uuid IS NULL
     """.command
   }
 
-  def delMetadatas(hashes: List[HashCode]): IO[Int] = {
+  def delDanglingMetadatas(hashes: List[HashCode]): IO[Int] = {
     if (hashes.nonEmpty) {
       pool.use {
-        _.prepare(delMetadatasC(hashes.size))
+        _.prepare(delDanglingMetadatasC(hashes.size))
           .flatMap { pc => pc.execute(hashes) }
           .map {
             case Completion.Delete(count) => count
