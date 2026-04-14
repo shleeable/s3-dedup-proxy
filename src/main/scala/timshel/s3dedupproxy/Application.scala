@@ -58,7 +58,7 @@ object Application extends IOApp {
   def using(config: GlobalConfig): Resource[IO, Application] = {
     (for {
       pool       <- pool(config)
-      database = Database(pool)(runtime)
+      database = Database(pool)(using runtime)
       dispatcher <- Dispatcher.parallel[IO]
       proxy      <- ProxyBlobStore.createProxy(config, database, dispatcher)
       cleanup    <- Cleanup.scheduled(config, database, dispatcher)

@@ -15,7 +15,7 @@ class PgIntegrationTests extends CatsEffectSuite {
       .flatMap(config =>
         Application
           .pool(config)
-          .map(pool => Database(pool)(IORuntime.global))
+          .map(pool => Database(pool)(using IORuntime.global))
           .preAllocate {
             Application.migration(config.db)
           }
