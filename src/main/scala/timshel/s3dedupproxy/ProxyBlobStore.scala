@@ -37,6 +37,7 @@ import org.jclouds.domain.LocationScope;
 import org.jclouds.io.Payload;
 import org.jclouds.io.payloads.FilePayload;
 import scala.util.Using
+import scala.collection.concurrent.TrieMap
 
 import timshel.s3dedupproxy.Database;
 
@@ -102,15 +103,17 @@ object ProxyBlobStore {
       .ignoreUnknownHeaders(true)
       .build()
 
-    val blobStore = createBlobStore(config.backend)
-
-    val proxyCache = new java.util.concurrent.ConcurrentHashMap[String, ProxyBlobStore]()
+    val blobStore  = createBlobStore(config.backend)
+    val proxyCache = TrieMap.empty[String, ProxyBlobStore]
 
     s3Proxy.setBlobStoreLocator((identity, container, blob) => {
       config.users.get(identity) match {
         case Some(secret) =>
-          val proxyBlobStore = proxyCache.computeIfAbsent(identity, _ =>
-            ProxyBlobStore(createBufferStore(identity), blobStore, identity, config.backend.bucket, db, dispatcher)
+          val proxyBlobStore = proxyCache.getOrElseUpdate(
+            identity, {
+              log.debug(s"Creating proxyBlobStore for ${identity}")
+              ProxyBlobStore(createBufferStore(identity), blobStore, identity, config.backend.bucket, db, dispatcher)
+            }
           )
           Maps.immutableEntry(secret, proxyBlobStore);
         case None => throw new SecurityException("Access denied")
