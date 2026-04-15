@@ -17,7 +17,7 @@ case class RedirectionController(
   }
 
   val routes = org.http4s.HttpRoutes.of[IO] { case _ @GET -> StringVar(identity) /: StringVar(bucket) /: key =>
-    db.getMappingHash(identity, bucket, key.toString).flatMap {
+    db.getMappingHash(identity, bucket, Uri.decode(key.renderString)).flatMap {
       case None => IO.pure(Response[IO](Status.NotFound))
       case Some(hash) =>
         val path = ProxyBlobStore.hashToKey(hash)
