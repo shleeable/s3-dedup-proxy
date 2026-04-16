@@ -16,19 +16,32 @@ case class ObjectStoreClient(
     .credentials(config.accessKeyId, config.secretAccessKey)
     .build()
 
-  def deleteKeys(hashes: List[HashCode]): IO[Unit] = IO.blocking {
+  def deleteKeys(hashes: List[HashCode]): IO[(List[HashCode], List[HashCode])] = IO.blocking {
+    import scala.jdk.CollectionConverters.IterableHasAsScala
+
     if (hashes.nonEmpty) {
       val objects = new java.util.LinkedList[DeleteObject]();
 
-      hashes.foreach { h =>
-        objects.add(new DeleteObject(ProxyBlobStore.hashToKey(h)))
-      }
+      val keyToHash = hashes
+        .map { h =>
+          val key = ProxyBlobStore.hashToKey(h)
+          objects.add(new DeleteObject(key))
+          key -> h
+        }
+        .to(scala.collection.mutable.Map)
 
-      client.removeObjects(RemoveObjectsArgs.builder().bucket(config.bucket).objects(objects).build()).forEach { r =>
-        val e = r.get()
-        log.error(s"Failed to delete ${e.objectName}, err ${e.code}: ${e.message}")
-      }
-    }
+      val failed = client
+        .removeObjects(RemoveObjectsArgs.builder().bucket(config.bucket).objects(objects).build())
+        .asScala
+        .flatMap { r =>
+          val e = r.get()
+          log.error(s"Failed to delete ${e.objectName}, err ${e.code}: ${e.message}")
+          keyToHash.remove(e.objectName)
+        }
+        .toList
+
+      keyToHash.values.toList -> failed
+    } else (List.empty, List.empty)
   }
 }
 
