@@ -356,16 +356,12 @@ class ProxyBlobStore(
       options: CopyOptions
   ): String = {
     val p = for {
-      hash <- db.getMappingHash(identity, fromContainer, fromName).map {
-        case Some(hash) => hash
-        case None       => throw new IllegalArgumentException("Not found")
+      mapping <- db.getMapping(identity, fromContainer, fromName).map {
+        case Some(m) => m
+        case None    => throw new IllegalArgumentException("Not found")
       }
-      _ <- db.putMapping(identity, toContainer, toName, hash)
-      metadata <- db.getMetadata(hash).map {
-        case Some(metadata) => metadata
-        case None           => throw new IllegalArgumentException("Not found")
-      }
-    } yield metadata.eTag
+      _ <- db.putMapping(identity, toContainer, toName, mapping.hash)
+    } yield mapping.eTag
 
     dispatcher.unsafeRunSync(p)
   }
