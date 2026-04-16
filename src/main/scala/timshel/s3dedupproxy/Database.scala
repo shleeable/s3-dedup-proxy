@@ -32,13 +32,38 @@ case class Mapping(
 object Database {
   val hashD: Decoder[HashCode] = bytea.map(HashCode.fromBytes(_))
   val hashE: Encoder[HashCode] = bytea.contramap(_.asBytes())
-  val PAGE_SIZE                = 100
+  val mappingD: Decoder[Mapping] = (uuid ~ text ~ text ~ hashD ~ hashD ~ int8 ~ text ~ text ~ timestamptz ~ timestamptz).map {
+    case uu ~ b ~ k ~ h ~ m ~ s ~ e ~ ct ~ c ~ u => Mapping(uu, b, k, h, m, s, e, ct, c, u)
+  }
+  val metadataD: Decoder[Metadata] = (int8 ~ text ~ text).map { case s ~ e ~ ct => Metadata(s, e, ct) }
+  val PAGE_SIZE                    = 100
 }
 
 case class Database(
     pool: Resource[IO, Session[IO]]
 )(implicit runtime: IORuntime) {
   import Database.*
+
+  val mappingQ: Query[String *: String *: String *: EmptyTuple, Mapping] =
+    sql"""
+      SELECT
+          file_mappings.uuid, file_mappings.bucket, file_mappings.file_key,
+          file_metadata.hash, file_metadata.md5, file_metadata.size, file_metadata.etag, file_metadata.content_type,
+          file_mappings.created, file_mappings.updated
+        FROM file_mappings
+          INNER JOIN file_metadata ON file_metadata.hash = file_mappings.hash
+        WHERE user_name = $text
+          AND bucket = $text
+          AND file_key = $text
+    """.query(mappingD)
+
+  def getMapping(user_name: String, bucket: String, file_key: String): IO[Option[Mapping]] =
+    pool.use {
+      _.prepare(mappingQ)
+        .flatMap { ps =>
+          ps.option(user_name, bucket, file_key)
+        }
+    }
 
   val mappingHashQ: Query[String *: String *: String *: EmptyTuple, HashCode] =
     sql"""
@@ -193,8 +218,7 @@ case class Database(
     sql"""
       SELECT size, etag, content_type FROM file_metadata WHERE hash = $hashE
     """
-      .query(int8 ~ text ~ text)
-      .map { case s ~ e ~ ct => Metadata(s, e, ct) }
+      .query(metadataD)
 
   def getMetadata(hashCode: HashCode): IO[Option[Metadata]] =
     pool.use {
@@ -281,9 +305,7 @@ case class Database(
           AND file_mappings.file_key > $text
         ORDER BY file_mappings.file_key ASC
         LIMIT $int4
-    """
-      .query(uuid ~ text ~ text ~ hashD ~ hashD ~ int8 ~ text ~ text ~ timestamptz ~ timestamptz)
-      .map { case uu ~ b ~ k ~ h ~ m ~ s ~ e ~ ct ~ c ~ u => Mapping(uu, b, k, h, m, s, e, ct, c, u) }
+    """.query(mappingD)
 
   def getMappings(
       user_name: String,

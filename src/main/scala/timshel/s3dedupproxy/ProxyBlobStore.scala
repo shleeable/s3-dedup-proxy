@@ -154,6 +154,12 @@ class ProxyBlobStore(
     }
   }
 
+  def getMappingKey(container: String, name: String): IO[Option[(Mapping, String)]] = {
+    db.getMapping(identity, container, name).map { m =>
+      m.map { m => m -> ProxyBlobStore.hashToKey(m.hash) }
+    }
+  }
+
   override def getContext(): BlobStoreContext = {
     return delegate().getContext();
   }
@@ -164,18 +170,28 @@ class ProxyBlobStore(
 
   override def getBlob(container: String, name: String): Blob = {
     log.debug(s"getBlob($container, $name)")
-    val p = getMapKey(container, name).flatMap {
-      case Some(key) => IO.blocking(delegate().getBlob(bucket, key))
-      case None      => IO.pure(null)
+    val p = getMappingKey(container, name).flatMap {
+      case Some((m, key)) =>
+        IO.blocking {
+          val blob = delegate().getBlob(bucket, key)
+          Option(blob).foreach { b => setMetadata(m, b.getMetadata()) }
+          blob
+        }
+      case None => IO.pure(null)
     }
     dispatcher.unsafeRunSync(p)
   }
 
   override def getBlob(container: String, name: String, getOptions: GetOptions): Blob = {
     log.debug(s"getBlob($container, $name, $getOptions)")
-    val p = getMapKey(container, name).flatMap {
-      case Some(key) => IO.blocking(delegate().getBlob(bucket, key, getOptions))
-      case None      => IO.pure(null)
+    val p = getMappingKey(container, name).flatMap {
+      case Some((m, key)) =>
+        IO.blocking {
+          val blob = delegate().getBlob(bucket, key, getOptions)
+          Option(blob).foreach { b => setMetadata(m, b.getMetadata()) }
+          blob
+        }
+      case None => IO.pure(null)
     }
     dispatcher.unsafeRunSync(p)
   }
@@ -234,9 +250,9 @@ class ProxyBlobStore(
 
   override def blobMetadata(container: String, name: String): BlobMetadata = {
     log.debug(s"blobMetadata($container, $name)")
-    val p = getMapKey(container, name).flatMap {
-      case Some(key) => IO.blocking(delegate().blobMetadata(bucket, key))
-      case None      => IO.pure(null)
+    val p = db.getMapping(identity, container, name).map {
+      case Some(m) => mapMetadata(m)
+      case None    => null
     }
     dispatcher.unsafeRunSync(p)
   }
@@ -516,14 +532,7 @@ class ProxyBlobStore(
     dispatcher.unsafeRunSync(p)
   }
 
-  def mapMetadata(mapping: Mapping): BlobMetadata = {
-    val metadata = new org.jclouds.io.payloads.BaseMutableContentMetadata()
-    metadata.setContentType(mapping.contentType)
-    metadata.setContentMD5(mapping.md5)
-    metadata.setContentLength(mapping.size)
-
-    val bm = new org.jclouds.blobstore.domain.internal.MutableBlobMetadataImpl()
-
+  def setMetadata(mapping: Mapping, bm: MutableBlobMetadata) = {
     bm.setId(mapping.uuid.toString)
     bm.setContainer(mapping.bucket)
     bm.setName(mapping.key)
@@ -532,8 +541,17 @@ class ProxyBlobStore(
     bm.setType(org.jclouds.blobstore.domain.StorageType.BLOB)
     bm.setCreationDate(java.util.Date.from(mapping.created.toInstant()))
     bm.setLastModified(java.util.Date.from(mapping.updated.toInstant()))
-    bm.setContentMetadata(metadata)
 
+    val mcm = bm.getContentMetadata()
+    mcm.setContentType(mapping.contentType)
+    mcm.setContentMD5(mapping.md5)
+    mcm.setContentLength(mapping.size)
+  }
+
+  def mapMetadata(mapping: Mapping): BlobMetadata = {
+    val bm = new org.jclouds.blobstore.domain.internal.MutableBlobMetadataImpl()
+    bm.setContentMetadata(new org.jclouds.io.payloads.BaseMutableContentMetadata())
+    setMetadata(mapping, bm)
     bm
   }
 

@@ -80,6 +80,7 @@ class PgIntegrationTests extends CatsEffectSuite {
         _ <- assertIO(database.getMappings("A", "bucket").map(_._1.map(_.hash)), List(hashCode))
         _ <- database.putMapping("A", "bucket", "B", hashCode)
         _ <- assertIO(database.getMappingHash("A", "bucket", "B"), Some(hashCode))
+        _ <- assertIO(database.getMapping("A", "bucket", "B").map(_.map(_.hash)), Some(hashCode))
         _ <- assertIO(database.countMappings(hashCode), 1L)
         _ <- assertIO(database.delMapping("A", "bucket", "B"), 1)
         _ <- assertIO(database.countMappings(hashCode), 0L)
