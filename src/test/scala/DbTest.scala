@@ -1,10 +1,13 @@
 import cats.effect._
+import cats.effect.kernel.Deferred
 import cats.effect.unsafe.IORuntime
-import timshel.s3dedupproxy.{Application, Database, Metadata}
+import com.google.common.hash.HashCode;
 import munit.CatsEffectSuite
+import scala.concurrent.duration.DurationInt
+import scala.concurrent.ExecutionContext
 import skunk._
 
-import com.google.common.hash.HashCode;
+import timshel.s3dedupproxy.{Application, Database, Metadata}
 
 class PgIntegrationTests extends CatsEffectSuite {
 
@@ -15,7 +18,7 @@ class PgIntegrationTests extends CatsEffectSuite {
       .flatMap(config =>
         Application
           .pool(config)
-          .map(pool => Database(pool)(using IORuntime.global))
+          .map(pool => TestDatabase(pool))
           .preAllocate {
             Application.migration(config.db)
           }
@@ -24,56 +27,136 @@ class PgIntegrationTests extends CatsEffectSuite {
 
   override def munitFixtures = List(database)
 
-  def use[T](f: Database => IO[T]): IO[T] = {
+  def use[T](f: TestDatabase => IO[T]): IO[T] = {
     IO(database()).flatMap(f)
   }
 
-  // Helper to bypass the Dangling 1h protection
-  def oldMetadatas(pool: Resource[IO, Session[IO]]): IO[Int] = {
-    import skunk.implicits._
-    import skunk.data.Completion
+  test("Advisory lock") {
+    val hashCode  = HashCode.fromLong(12);
+    val hashCode2 = HashCode.fromLong(24);
 
-    val cmd = sql"""
-      UPDATE file_metadata SET created = created - INTERVAL '2 hour'
-    """.command
+    use { database =>
+      for {
+        _       <- assertIO(database.withAdvisoryLock(hashCode) { _ => IO.pure(true) }, true)
+        _       <- assertIO(database.withAdvisoryLock(hashCode) { _ => IO.pure(true) }, true)
+        block   <- Deferred[IO, Boolean]
+        flag    <- Deferred[IO, Boolean]
+        blocker <- database.withAdvisoryLock(hashCode) { _ => block.get }.start
+        blocked <- database.withAdvisoryLock(hashCode) { _ => flag.complete(true) }.start
+        _       <- assertIO(database.withAdvisoryLock(hashCode2) { _ => IO.pure(true) }, true)
+        _       <- assertIO(flag.tryGet, None)
+        _       <- block.complete(true)
+        _       <- assertIO(blocker.join.map(_.isSuccess), true)
+        _       <- assertIO(blocked.join.map(_.isSuccess), true)
+      } yield ()
+    }
+  }
 
-    pool.use {
-      _.prepare(cmd)
-        .flatMap { pc => pc.execute(skunk.Void) }
-        .map {
-          case Completion.Update(count) => count
-          case _                        => throw new AssertionError("oldMetadatas execution should only return Update")
-        }
+  test("Advisory shared lock") {
+    val hashCode  = HashCode.fromLong(12);
+    val hashCode2 = HashCode.fromLong(24);
+
+    use { database =>
+      for {
+        block   <- Deferred[IO, Boolean]
+        blocker <- database.withAdvisorySharedLock(hashCode) { _ => block.get }.start
+        _       <- assertIO(database.withAdvisorySharedLock(hashCode) { _ => IO.pure(true) }, true)
+        flag1   <- Deferred[IO, Boolean]
+        flag2   <- Deferred[IO, Boolean]
+        blocker <- database.withAdvisorySharedLock(hashCode) { _ => block.get }.start
+        blocked <- database.withAdvisoryLock(hashCode) { _ => flag1.complete(true) }.start
+        shared  <- database.withAdvisorySharedLock(hashCode) { _ => flag2.complete(true) }.start
+        _       <- assertIO(flag1.tryGet, None)
+        _       <- assertIO(flag2.tryGet, None)
+        _       <- block.complete(true)
+        _       <- assertIO(blocker.join.map(_.isSuccess), true)
+        _       <- assertIO(blocked.join.map(_.isSuccess), true)
+        _       <- assertIO(shared.join.map(_.isSuccess), true)
+      } yield ()
+    }
+  }
+
+  test("Function hash_key") {
+    val hashCode  = HashCode.fromLong(12);
+    val hashCode2 = HashCode.fromLong(24);
+    val hashCode3 = HashCode.fromString("247d9250d3c7a567036857af9b602def8b4415f28176ec23552bd96b8875a147")
+    val hashCode4 = HashCode.fromString("013095eb019fb48dd43d3b80e2ea2a008edea8bd26e64da390ab5877e911bf26")
+
+    use { database =>
+      for {
+        _ <- assertIO(database.compute_key(hashCode), Database.lockKey(hashCode))
+        _ <- assertIO(database.compute_key(hashCode2), Database.lockKey(hashCode2))
+        _ <- assertIO(database.compute_key(hashCode3), Database.lockKey(hashCode3))
+        _ <- assertIO(database.compute_key(hashCode4), Database.lockKey(hashCode4))
+      } yield ()
     }
   }
 
   test("Query file_metadata run against db") {
-    use { database =>
-      val hashCode  = HashCode.fromInt(12);
-      val hashCode2 = HashCode.fromInt(24);
+    val hashCode  = HashCode.fromLong(12);
+    val hashCode2 = HashCode.fromLong(24);
 
+    use { database =>
       for {
         _ <- database.putMetadata(hashCode, hashCode, 10L, "A", "CT")
         _ <- database.putMetadata(hashCode, hashCode, 12L, "B", "CT")
-        _ <- assertIO(database.getMetadata(hashCode), Some(Metadata(10L, "B", "CT")))
+        _ <- assertIO(database.checkMetadata(hashCode), Some(Metadata(10L, "B", "CT")))
         _ <- database.putMetadata(hashCode2, hashCode2, 12L, "B", "CT")
         _ <- database.putMapping("A", "bucket", "B", hashCode2)
         _ <- assertIO(database.getDangling(1000), List.empty)
-        _ <- assertIO(oldMetadatas(database.pool), 2)
+        _ <- assertIO(database.oldMetadatas(), 2)
         _ <- assertIO(database.getDangling(1000), List(hashCode))
         _ <- assertIO(database.delDanglingMetadatas(List(hashCode, hashCode2)), 1) // Check that hashCode2 is not deleted
         _ <- assertIO(database.delMappings("A", "bucket"), 1)
         _ <- assertIO(database.getDangling(1000), List(hashCode2))
         _ <- assertIO(database.delDanglingMetadatas(List(hashCode2)), 1)
-        _ <- assertIO(database.getMetadata(hashCode), None)
+        _ <- assertIO(database.checkMetadata(hashCode), None)
+      } yield ()
+    }
+  }
+
+  test("Dangling selection should lock") {
+    val hashCode  = HashCode.fromLong(12);
+    val hashCode2 = HashCode.fromLong(24);
+
+    use { database =>
+      for {
+        _    <- database.putMetadata(hashCode, hashCode, 10L, "A", "CT")
+        _    <- assertIO(database.oldMetadatas(), 1)
+        flag <- Deferred[IO, Boolean]
+        blocked <- database.locksReleaseBlock { s =>
+          for {
+            _       <- assertIO(database.getDangling(1000)(s), List(hashCode))
+            blocked <- database.withAdvisoryLock(hashCode) { _ => flag.complete(true) }.start
+            _       <- assertIO(database.withAdvisorySharedLock(hashCode2) { _ => IO.pure(true) }, true)
+            _       <- assertIO(flag.tryGet, None)
+          } yield blocked
+        }
+        _ <- assertIO(blocked.join.map(_.isSuccess), true)
+      } yield ()
+    }
+  }
+
+  test("Check Metadata should evict from cleanup") {
+    val hashCode = HashCode.fromLong(12);
+
+    use { database =>
+      for {
+        _ <- database.putMetadata(hashCode, hashCode, 10L, "A", "CT")
+        _ <- assertIO(database.oldMetadatas(), 1)
+        _ <- assertIO(database.getDangling(1000), List(hashCode))
+        _ <- assertIO(database.getDangling(1000), List(hashCode))
+        _ <- database.checkMetadata(hashCode)
+        _ <- assertIO(database.getDangling(1000), List.empty)
+        _ <- assertIO(database.delDanglingMetadatas(List(hashCode)), 1)
       } yield ()
     }
   }
 
   test("Query file_mappings run against db") {
-    use { database =>
-      val hashCode = HashCode.fromInt(12);
+    val hashCode = HashCode.fromLong(12);
 
+    use { database =>
       for {
         _ <- database.putMetadata(hashCode, hashCode, 10L, "A", "CT")
         _ <- database.putMapping("A", "bucket", "B", hashCode)

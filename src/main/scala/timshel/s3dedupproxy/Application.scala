@@ -22,7 +22,8 @@ case class Application(
 object Application extends IOApp {
   val log = com.typesafe.scalalogging.Logger(classOf[Application])
 
-  /** */
+  /**
+    */
   def run(args: List[String]): IO[ExitCode] = {
     default().use { app =>
       IO.never

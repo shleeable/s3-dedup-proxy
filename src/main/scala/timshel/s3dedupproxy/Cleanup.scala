@@ -27,12 +27,14 @@ case class Cleanup(
 
   def purge(): IO[Int] = {
     log.debug("Running purge job")
-    for {
-      hashes         <- db.getDangling(1000)
-      (successes, _) <- client.deleteKeys(hashes)
-      count          <- db.delDanglingMetadatas(successes)
-      _ = log.debug(s"Purged $count files")
-    } yield count
+    db.locksReleaseBlock { s =>
+      for {
+        hashes         <- db.getDangling(1000)(s)
+        (successes, _) <- client.deleteKeys(hashes)
+        count          <- db.delDanglingMetadatas(successes)(s)
+        _ = log.debug(s"Purged $count files")
+      } yield count
+    }
   }
 
 }

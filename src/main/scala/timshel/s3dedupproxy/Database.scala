@@ -9,6 +9,7 @@ import skunk._
 import skunk.data.Completion
 import skunk.implicits._
 import skunk.codec.all._
+import scala.reflect.TypeTest
 
 case class Metadata(
     size: Long,
@@ -30,6 +31,13 @@ case class Mapping(
 )
 
 object Database {
+  val log = com.typesafe.scalalogging.Logger(classOf[Database])
+
+  val void = new Decoder[Void] {
+    def types                                         = List(skunk.data.Type.void)
+    def decode(offset: Int, ss: List[Option[String]]) = Right(Void)
+  }
+
   val hashD: Decoder[HashCode] = bytea.map(HashCode.fromBytes(_))
   val hashE: Encoder[HashCode] = bytea.contramap(_.asBytes())
   val mappingD: Decoder[Mapping] = (uuid ~ text ~ text ~ hashD ~ hashD ~ int8 ~ text ~ text ~ timestamptz ~ timestamptz).map {
@@ -37,12 +45,33 @@ object Database {
   }
   val metadataD: Decoder[Metadata] = (int8 ~ text ~ text).map { case s ~ e ~ ct => Metadata(s, e, ct) }
   val PAGE_SIZE                    = 100
+
+  def lockKey(hash: HashCode): Long = java.nio.ByteBuffer.wrap(hash.asBytes().take(8)).getLong()
 }
 
 case class Database(
     pool: Resource[IO, Session[IO]]
 )(implicit runtime: IORuntime) {
   import Database.*
+
+  val lockQ: Query[Long, Void] = sql"SELECT pg_advisory_lock($int8)".query(void)
+
+  val unlockQ: Query[Long, Boolean] = sql"SELECT  pg_advisory_unlock($int8)".query(bool)
+
+  /** Acquires a session scoped advisory lock keyed on the hash.
+    * Uses the first 8 bytes of the hash as the lock key for good distribution.
+    */
+  def withAdvisoryLock[A](hash: HashCode)(body: Session[IO] => IO[A]): IO[A] = {
+    val lockKey = Database.lockKey(hash)
+    pool.use { s =>
+      s.prepare(lockQ)
+        .flatMap(_.unique(lockKey))
+        .flatMap { _ => body(s) }
+        .guarantee {
+          s.prepare(unlockQ).flatMap(_.unique(lockKey)).map(_ => ())
+        }
+    }
+  }
 
   val mappingQ: Query[String *: String *: String *: EmptyTuple, Mapping] =
     sql"""
@@ -202,29 +231,30 @@ case class Database(
   val putMetadataC: Command[(HashCode, HashCode, Long, String, String, String, String)] =
     sql"""
       INSERT INTO file_metadata (hash, md5, size, etag, content_type) VALUES ($hashE, $hashE, $int8, $text, $text)
-        ON CONFLICT (hash) DO UPDATE SET etag= $text, content_type = $text, updated = now();
+        ON CONFLICT (hash) DO UPDATE SET etag= $text, content_type = $text, updated = now(), checked = now();
     """.command
 
-  def putMetadata(hash: HashCode, md5: HashCode, size: Long, eTag: String, contentType: String): IO[Completion] = {
-    pool.use {
-      _.prepare(putMetadataC)
-        .flatMap { pc =>
-          pc.execute(hash, md5, size, eTag, contentType, eTag, contentType)
-        }
-    }
+  def putMetadata(hash: HashCode, md5: HashCode, size: Long, eTag: String, contentType: String)(
+      session: Session[IO]
+  ): IO[Completion] = {
+    session
+      .prepare(putMetadataC)
+      .flatMap { pc =>
+        pc.execute(hash, md5, size, eTag, contentType, eTag, contentType)
+      }
   }
 
-  val getMetadataQ: Query[HashCode, Metadata] =
+  val checkMetadataQ: Query[HashCode, Metadata] =
     sql"""
-      SELECT size, etag, content_type FROM file_metadata WHERE hash = $hashE
-    """
-      .query(metadataD)
+      UPDATE file_metadata
+        SET checked = now()
+        WHERE hash = $hashE
+        RETURNING size, etag, content_type
+    """.query(metadataD)
 
-  def getMetadata(hashCode: HashCode): IO[Option[Metadata]] =
-    pool.use {
-      _.prepare(getMetadataQ)
-        .flatMap { ps => ps.option(hashCode) }
-    }
+  def checkMetadata(hashCode: HashCode)(session: Session[IO]): IO[Option[Metadata]] = {
+    session.prepare(checkMetadataQ).flatMap { ps => ps.option(hashCode) }
+  }
 
   def delDanglingMetadatasC(count: Int): Command[(List[HashCode])] = {
     sql"""
@@ -237,36 +267,50 @@ case class Database(
     """.command
   }
 
-  def delDanglingMetadatas(hashes: List[HashCode]): IO[Int] = {
+  def delDanglingMetadatas(hashes: List[HashCode])(session: Session[IO]): IO[Int] = {
     if (hashes.nonEmpty) {
-      pool.use {
-        _.prepare(delDanglingMetadatasC(hashes.size))
-          .flatMap { pc => pc.execute(hashes) }
-          .map {
-            case Completion.Delete(count) => count
-            case _                        => throw new AssertionError("delMetadatas execution should only return Delete")
-          }
-      }
+      session
+        .prepare(delDanglingMetadatasC(hashes.size))
+        .flatMap { pc => pc.execute(hashes) }
+        .map {
+          case Completion.Delete(count) => count
+          case _                        => throw new AssertionError("delMetadatas execution should only return Delete")
+        }
     } else IO.pure(0)
   }
 
-  val getDanglingQ: Query[Int, HashCode] =
+  val getDanglingQ: Query[Int, (HashCode, Void)] =
     sql"""
-      SELECT file_metadata.hash
-        FROM file_metadata
-          LEFT JOIN file_mappings ON file_mappings.hash = file_metadata.hash
-        WHERE file_mappings.uuid IS NULL
-          AND file_metadata.created < NOW() - INTERVAL '1 hour'
-        ORDER BY file_metadata.created ASC
-        LIMIT $int4
-    """
-      .query(hashD)
+      WITH dangling as (
+        SELECT file_metadata.hash
+          FROM file_metadata
+            LEFT JOIN file_mappings ON file_mappings.hash = file_metadata.hash
+          WHERE file_mappings.uuid IS NULL
+            AND file_metadata.checked < NOW() - INTERVAL '1 hour'
+          ORDER BY file_metadata.checked ASC
+          LIMIT $int4
+      )
+      SELECT hash, pg_advisory_lock(hash_key(hash)) from dangling
+    """.query(hashD ~ void)
 
-  def getDangling(limit: Int): IO[List[HashCode]] =
-    pool.use {
-      _.prepare(getDanglingQ)
-        .flatMap { pc => pc.stream(limit, limit).compile.toList }
+  def getDangling(limit: Int)(session: Session[IO]): IO[List[HashCode]] =
+    session
+      .prepare(getDanglingQ)
+      .flatMap { pc => pc.stream(limit, limit).map(_._1).compile.toList }
+
+  val releaseLockQ: Query[Void, Void] = sql"SELECT pg_advisory_unlock_all()".query(void)
+
+  def releaseLocks(s: Session[IO]): IO[Unit] = {
+    s.prepare(releaseLockQ).flatMap(_.option(skunk.Void)).map(_ => ())
+  }
+
+  def locksReleaseBlock[A](body: Session[IO] => IO[A]): IO[A] = {
+    pool.use { s =>
+      body(s).guarantee {
+        releaseLocks(s).map(_ => ())
+      }
     }
+  }
 
   def withMaker(maxResults: Int)(mappings: List[Mapping]): (List[Mapping], Option[String]) = {
     if (mappings.size == maxResults) {
@@ -280,8 +324,7 @@ case class Database(
         FROM file_mappings
         WHERE user_name = $text
         ORDER BY bucket ASC
-    """
-      .query(text)
+    """.query(text)
 
   def getContainers(user_name: String): IO[List[String]] = {
     pool

@@ -318,8 +318,8 @@ class ProxyBlobStore(
       size: Long,
       contenType: String
   ): IO[String] = {
-    db.getMetadata(hash)
-      .flatMap {
+    db.withAdvisoryLock(hash) { s =>
+      db.checkMetadata(hash)(s).flatMap {
         case Some(metadata) => IO.pure(metadata.eTag)
         case None =>
           for {
@@ -335,15 +335,15 @@ class ProxyBlobStore(
                 new PutOptions().setBlobAccess(BlobAccess.PUBLIC_READ).multipart(size > 5 * 1024 * 1024)
               );
             }
-            _ <- db.putMetadata(hash, md5, size, eTag, contenType)
+            _ <- db.putMetadata(hash, md5, size, eTag, contenType)(s)
           } yield eTag
       }
-      .flatMap { eTag =>
-        for {
-          _ <- db.putMapping(identity, container, name, hash)
-          _ <- IO.blocking(bufferStore.removeBlob(container, name))
-        } yield eTag
-      }
+    }.flatMap { eTag =>
+      for {
+        _ <- db.putMapping(identity, container, name, hash)
+        _ <- IO.blocking(bufferStore.removeBlob(container, name))
+      } yield eTag
+    }
   }
 
   /** javadoc says options are ignored, so we ignore them too
