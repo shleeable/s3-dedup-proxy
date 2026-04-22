@@ -1,5 +1,6 @@
 package timshel.s3dedupproxy
 
+import cats.data.{Kleisli, OptionT}
 import cats.effect.IO
 
 import org.http4s._
@@ -35,7 +36,20 @@ case class ApiController(
 ) {
   import RedirectionController._
 
-  val routes = org.http4s.HttpRoutes.of[IO] { case _ @DELETE -> Root / "purge" =>
+  val routes = ApiController.localOnly(org.http4s.HttpRoutes.of[IO] { case _ @DELETE -> Root / "purge" =>
     cleanup.purge().flatMap { count => Ok(s"$count deleted") }
+  })
+}
+
+object ApiController {
+  val log = com.typesafe.scalalogging.Logger(classOf[ApiController])
+
+  def localOnly(service: HttpRoutes[IO]): HttpRoutes[IO] = Kleisli { (req: Request[IO]) =>
+    val isLocal = req.remoteAddr.exists { addr =>
+      addr.asIpv4.exists { a => a.isLoopback || a.isPrivate } || addr.asIpv6.exists { a => a.isLoopback || a.isPrivate }
+    }
+    log.debug(s"localOnly check for ${req.remoteAddr} - $isLocal")
+    if (isLocal) service(req) else OptionT.some(Response[IO](Status.Forbidden))
   }
+
 }
