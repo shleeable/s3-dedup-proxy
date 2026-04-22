@@ -304,6 +304,7 @@ class ProxyBlobStore(
       .onError { e =>
         IO.blocking {
           log.error(s"Failed to putBlob($container, $blob): $e")
+          bufferStore.removeBlob(container, name)
         }
       }
 
@@ -411,6 +412,7 @@ class ProxyBlobStore(
       .onError { e =>
         IO.blocking {
           log.error(s"Failed to completeMultipartUpload(${mpu.id()}): $e")
+          bufferStore.removeBlob(container, name)
         }
       }
 
