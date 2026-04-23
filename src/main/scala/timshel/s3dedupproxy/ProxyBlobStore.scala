@@ -93,7 +93,12 @@ object ProxyBlobStore {
 
   /** S3Proxy will throw if it sees an X-Amz header it doesn't recognize
     */
-  def createProxy(config: GlobalConfig, db: Database, dispatcher: Dispatcher[IO]): Resource[IO, S3Proxy] = {
+  def createProxy(
+      config: GlobalConfig,
+      users: UserRegistry,
+      db: Database,
+      dispatcher: Dispatcher[IO]
+  ): Resource[IO, S3Proxy] = {
     val s3Proxy = S3Proxy
       .builder()
       .awsAuthentication(org.gaul.s3proxy.AuthenticationType.AWS_V2_OR_V4, "DUMMY", "DUMMY")
@@ -107,24 +112,27 @@ object ProxyBlobStore {
     val proxyCache = TrieMap.empty[String, ProxyBlobStore]
 
     s3Proxy.setBlobStoreLocator((identity, container, blob) => {
-      config.users.get(identity) match {
+      users.get(identity) match {
         case Some(secret) =>
           val proxyBlobStore = proxyCache.getOrElseUpdate(
             identity, {
+              log.debug(s"Creating store path for $identity")
+              bufferStorePath(identity).mkdirs()
+
               log.debug(s"Creating proxyBlobStore for ${identity}")
               ProxyBlobStore(createBufferStore(identity), blobStore, identity, config.backend.bucket, db, dispatcher)
             }
           )
           Maps.immutableEntry(secret, proxyBlobStore);
-        case None => throw new SecurityException("Access denied")
+        case None => {
+          proxyCache.remove(identity)
+          null
+        }
       }
     });
 
     Resource.make {
       IO.blocking {
-        config.users.keys.foreach { identity => bufferStorePath(identity).mkdirs() }
-        log.debug(s"Buffer store path created for users (${config.users.keys})")
-
         s3Proxy.start()
         log.info(s"Object proxy running on ${config.proxy.uri}")
         s3Proxy

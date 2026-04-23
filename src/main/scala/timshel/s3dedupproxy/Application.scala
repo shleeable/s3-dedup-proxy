@@ -57,11 +57,13 @@ object Application extends IOApp {
   }
 
   def using(config: GlobalConfig): Resource[IO, Application] = {
+    log.info("Application starting")
     (for {
-      pool <- pool(config)
+      userRegistry <- UserRegistry(config)
+      pool         <- pool(config)
       database = Database(pool)(using runtime)
       dispatcher <- Dispatcher.parallel[IO]
-      proxy      <- ProxyBlobStore.createProxy(config, database, dispatcher)
+      proxy      <- ProxyBlobStore.createProxy(config, userRegistry, database, dispatcher)
       cleanup    <- Cleanup.scheduled(config, database, dispatcher)
       httpApp = org.http4s.server
         .Router(

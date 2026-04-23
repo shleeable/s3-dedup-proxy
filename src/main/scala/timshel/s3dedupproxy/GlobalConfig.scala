@@ -2,10 +2,10 @@ package timshel.s3dedupproxy
 
 import com.comcast.ip4s.{Host, Port}
 import java.net.URI;
+import java.nio.file.{Files, Path}
 import org.http4s.Uri;
 import org.quartz.CronExpression;
 import pureconfig.*
-import pureconfig.generic.semiauto.deriveReader
 import scala.util.Try;
 
 given hostReader: ConfigReader[Host] = ConfigReader.fromStringOpt(Host.fromString)
@@ -52,7 +52,8 @@ case class GlobalConfig(
     api: API,
     proxy: Proxy,
     backend: BackendConfig,
-    backupBackend: Option[BackendConfig] = None,
+    backupBackend: Option[BackendConfig],
     db: DBConfig,
-    users: Map[String, String]
+    users: Map[String, String],
+    usersFile: Option[Path]
 ) derives ConfigReader
