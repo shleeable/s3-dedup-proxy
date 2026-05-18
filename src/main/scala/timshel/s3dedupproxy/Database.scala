@@ -136,13 +136,18 @@ case class Database(
         ON CONFLICT (user_name, bucket, file_key) DO UPDATE SET hash = $hashE, updated = now();
     """.command
 
+  def putMapping(user_name: String, bucket: String, file_key: String, hash: HashCode)(
+      session: Session[IO]
+  ): IO[Completion] = {
+    session
+      .prepare(putMappingC)
+      .flatMap { pc =>
+        pc.execute(user_name, bucket, file_key, hash, hash)
+      }
+  }
+
   def putMapping(user_name: String, bucket: String, file_key: String, hash: HashCode): IO[Completion] = {
-    pool.use {
-      _.prepare(putMappingC)
-        .flatMap { pc =>
-          pc.execute(user_name, bucket, file_key, hash, hash)
-        }
-    }
+    pool.use(putMapping(user_name, bucket, file_key, hash))
   }
 
   def delMappingsC(count: Int): Command[List[(String, String, String)]] = {
