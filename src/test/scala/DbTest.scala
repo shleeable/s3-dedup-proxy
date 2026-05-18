@@ -81,7 +81,7 @@ class PgIntegrationTests extends CatsEffectSuite {
     val hashCode  = HashCode.fromLong(12);
     val hashCode2 = HashCode.fromLong(24);
     val hashCode3 = HashCode.fromString("247d9250d3c7a567036857af9b602def8b4415f28176ec23552bd96b8875a147")
-    val hashCode4 = HashCode.fromString("013095eb019fb48dd43d3b80e2ea2a008edea8bd26e64da390ab5877e911bf26")
+    val hashCode4 = HashCode.fromString("b472b87da81aa82ed80da423df8d4381b498cbda10eb30ae596b119f58778f8fd3540e587fbf0c253fd3332189e40135e5e79fcc0f90e3199f3a3a16a6df197d")
 
     use { database =>
       for {
