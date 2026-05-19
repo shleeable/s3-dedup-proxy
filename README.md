@@ -41,11 +41,11 @@ Log backend use slf4j simple logger and can be configured using parameters such 
 
 Configuration file need to follow [HOCON](https://github.com/lightbend/config/blob/master/HOCON.md#hocon-human-optimized-config-object-notation) syntax.
 
-- `api.host`: S3 endpoint, Optional default to `0.0.0.0`
-- `api.port`: S3 endpoint, Optional default to `23279`
+- `api.host`: S3 endpoint, Optional, default to `0.0.0.0`
+- `api.port`: S3 endpoint, Optional, default to `23279`
 - `proxy.host`: Redirection endpoint, Optional default to `0.0.0.0`
 - `proxy.port`: Redirection endpoint, Optional default to `23278`
-- `proxy.purge`: Cron expression to shedule the purge operation. Optional default to `0 0 * * * ?`
+- `proxy.purge`: Cron expression to shedule the purge operation. Optional, default to `0 0 * * * ?`
 - `backend.protocol`: Protocol of the backing object store, match `jclouds.provider` in https://github.com/gaul/s3proxy/wiki/Storage-backend-examples
 - `backend.endpoint`: Object store endpoint
 - `backend.virtual-host`: Use path style (`false`) or host-style access.
@@ -53,14 +53,29 @@ Configuration file need to follow [HOCON](https://github.com/lightbend/config/bl
 - `backend.secret-key`: Secret key
 - `backend.bucket`: "mastodon"
 - `backend.public-host`: "http://127.0.0.1/mastodon"
-- `db.host`: "Postgres"
-- `db.port`: 5432
+- `db.host`: Postgres database host
+- `db.port`: Optional, default to `5432`
 - `db.user`: "s3proxy"
 - `db.pass`: "s3proxy"
 - `db.database`: "s3proxy"
 - `users`: key/value map with Access key id and secret.
 - `users-file`: Optional path to a key/value file (file modification will be used without restart)
 
+
+#### Docker
+
+A docker image is available at https://hub.docker.com/r/timshel/s3-dedup-proxy
+By default configuration file should be provided at `/s3-dedup-proxy/application.conf`.
+
+```bash
+> docker run --name s3proxy -v "$PWD/application.conf:/s3-dedup-proxy/application.conf" timshel/s3-dedup-proxy:0.0.4
+```
+
+Or if you want to mount the configuration file to a different location:
+
+```bash
+> docker run --name s3proxy -v "$PWD/application.conf:/toto.conf" timshel/s3-dedup-proxy:0.0.4 -Dconfig.file=/toto.conf
+```
 
 ### Redirection API
 
