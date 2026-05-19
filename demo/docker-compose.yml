@@ -3,8 +3,10 @@ services:
     container_name: s3dedupproxy_proxy
     image: s3dedupproxy_poolmgr
     build:
-      context: .
+      context: ..
       dockerfile: Dockerfile
+    volumes:
+      - ./application.conf:/s3-dedup-proxy/application.conf
     ports:
       - "23278:23278"
       - "23279:23279"

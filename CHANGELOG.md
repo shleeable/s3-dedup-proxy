@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.4
+
+- Renamed config key `backend.access-key` and `backend.secret-key`.
+- Publish to docker
+
 ## 0.0.3
 
 - Multiple bugfixes and improvement thx to @shleeable

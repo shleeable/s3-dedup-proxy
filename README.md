@@ -25,7 +25,7 @@ drwxr-xr-x 2 20480 Feb 25 18:37 lib
 
 ### Running
 
-You first will need to create a config file, you can take inspiration from [application.conf](docker.application.conf).
+You first will need to create a config file, you can take inspiration from [template.application.conf](template.application.conf).
 
 ```bash
 > ls -l
@@ -36,6 +36,31 @@ drwxr-xr-x 2 20480 Feb 25 18:37 lib
 ```
 
 Log backend use slf4j simple logger and can be configured using parameters such as `-Dorg.slf4j.simpleLogger.log.timshel.s3dedupproxy=info`.
+
+#### Configuration
+
+Configuration file need to follow [HOCON](https://github.com/lightbend/config/blob/master/HOCON.md#hocon-human-optimized-config-object-notation) syntax.
+
+- `api.host`: S3 endpoint, Optional default to `0.0.0.0`
+- `api.port`: S3 endpoint, Optional default to `23279`
+- `proxy.host`: Redirection endpoint, Optional default to `0.0.0.0`
+- `proxy.port`: Redirection endpoint, Optional default to `23278`
+- `proxy.purge`: Cron expression to shedule the purge operation. Optional default to `0 0 * * * ?`
+- `backend.protocol`: Protocol of the backing object store, match `jclouds.provider` in https://github.com/gaul/s3proxy/wiki/Storage-backend-examples
+- `backend.endpoint`: Object store endpoint
+- `backend.virtual-host`: Use path style (`false`) or host-style access.
+- `backend.access-key`: Access key
+- `backend.secret-key`: Secret key
+- `backend.bucket`: "mastodon"
+- `backend.public-host`: "http://127.0.0.1/mastodon"
+- `db.host`: "Postgres"
+- `db.port`: 5432
+- `db.user`: "s3proxy"
+- `db.pass`: "s3proxy"
+- `db.database`: "s3proxy"
+- `users`: key/value map with Access key id and secret.
+- `users-file`: Optional path to a key/value file (file modification will be used without restart)
+
 
 ### Redirection API
 
@@ -72,6 +97,7 @@ It deletes up to 1000 files (the maximum for a single call of `RemoveObjects`).
 The `--build` ensure that the image is up to date.
 
 ```bash
+> cd demo
 > docker compose up --build S3DedupProxy
 ```
 

@@ -32,7 +32,8 @@ object Application extends IOApp {
 
   def config(): Resource[IO, GlobalConfig] = {
     IO.blocking {
-      pureconfig.ConfigSource.default.load[GlobalConfig] match {
+      given reader: pureconfig.ConfigReader[GlobalConfig] = pureconfig.generic.semiauto.deriveReader
+      pureconfig.ConfigSource.default.load[GlobalConfig](using reader) match {
         case Left(e)       => throw new RuntimeException(e.prettyPrint());
         case Right(config) => config
       }

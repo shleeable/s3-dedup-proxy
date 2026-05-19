@@ -28,13 +28,16 @@ RUN apt-get update \
         openjdk-25-jre
 
 COPY --from=build /s3-dedup-proxy/target/universal/stage /s3-dedup-proxy
-COPY docker.application.conf /s3-dedup-proxy/application.conf
-
-WORKDIR /s3-dedup-proxy
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD curl -sf http://localhost:23279/ || exit 1
 
 EXPOSE 23278 23279
 
-ENTRYPOINT ["/s3-dedup-proxy/bin/s3-dedup-proxy", "-Dconfig.file=application.conf"]
+RUN mkdir -p /tmp/s3dedupproxy-buffer; chown 10001:10001 /tmp/s3dedupproxy-buffer
+
+USER 10001
+WORKDIR /s3-dedup-proxy
+
+ENTRYPOINT ["/s3-dedup-proxy/bin/s3-dedup-proxy"]
+CMD ["-Dconfig.file=application.conf"]

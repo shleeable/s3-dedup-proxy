@@ -77,7 +77,7 @@ object ProxyBlobStore {
 
     val blobStore = ContextBuilder
       .newBuilder(if ("s3".equals(conf.protocol)) "aws-s3" else conf.protocol)
-      .credentials(conf.accessKeyId, conf.secretAccessKey)
+      .credentials(conf.accessKey, conf.secretKey)
       .modules(ImmutableList.of(new org.jclouds.logging.slf4j.config.SLF4JLoggingModule()))
       .endpoint(conf.endpoint)
       .overrides(overrides)

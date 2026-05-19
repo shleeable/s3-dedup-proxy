@@ -7,7 +7,7 @@ lazy val root = project
   .in(file("."))
   .settings(
     name         := "s3-dedup-proxy",
-    version      := "0.0.3",
+    version      := "0.0.4",
     scalaVersion := scala3Version,
     scalacOptions ++= Seq(
       "-deprecation",
@@ -37,7 +37,7 @@ lazy val root = project
       "com.squareup.okhttp3"             % "okhttp-brotli"              % "5.3.2",
 
       // Scala
-      "com.github.pureconfig"           %% "pureconfig-generic-scala3"  % "0.17.10",
+      "com.github.pureconfig"           %% "pureconfig-generic-scala3"  % "0.17.7",
       "com.typesafe.scala-logging"      %% "scala-logging"              % "3.9.5",
       "org.scalikejdbc"                 %% "scalikejdbc"                % "4.3.5",
       "org.tpolecat"                    %% "skunk-core"                 % "0.6.5",

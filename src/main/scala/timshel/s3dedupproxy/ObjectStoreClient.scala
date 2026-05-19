@@ -13,7 +13,7 @@ final case class ObjectStoreClient(
   val client = MinioClient
     .builder()
     .endpoint(config.endpoint)
-    .credentials(config.accessKeyId, config.secretAccessKey)
+    .credentials(config.accessKey, config.secretKey)
     .build()
 
   def deleteKeys(hashes: List[HashCode]): IO[(List[HashCode], List[HashCode])] = IO.blocking {
