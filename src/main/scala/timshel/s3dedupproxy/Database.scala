@@ -34,23 +34,35 @@ object Database {
   val log = com.typesafe.scalalogging.Logger(classOf[Database])
 
   opaque type Delimiter = String
-  opaque type Marker    = String
   opaque type Prefix    = String
+
+  final case class Marker(root: String, mark: String) {
+    override def toString(): String = s"$root#$mark"
+  }
 
   object Delimiter:
     def apply(s: String): Delimiter = s
-
-  object Marker:
-    def apply(s: String): Marker = s
-    def empty: Marker            = ""
 
   object Prefix:
     def apply(s: String): Prefix = s
     def empty: Prefix            = ""
     def len(p: Prefix)           = p.length()
 
+  object Marker {
+    val empty = Marker("", "")
+
+    def apply(str: String): Marker = Marker(str, "")
+
+    def delimited(str: String): Marker = str match {
+      case s"$root#$mark" if mark == "file" || mark == "dir" => Marker(root, mark)
+      case s => Marker(s, "")
+    }
+  }
+
   val delim: Encoder[Delimiter] = text
-  val marker: Encoder[Marker]   = text
+  val marker_root: Encoder[Marker] = text.contramap(_.root)
+  val marker_mark: Encoder[Marker] = text.contramap(_.mark)
+  val markerD: Decoder[Marker] = (text ~ text).map { case r ~ m => Marker(r, m) }
   val prefix: Encoder[Prefix]   = text
 
   val void = new Decoder[Void] {
@@ -370,7 +382,7 @@ case class Database(
         WHERE user_name = $text
           AND file_mappings.bucket = $text
           AND starts_with(file_mappings.file_key, $prefix)
-          AND file_mappings.file_key > $marker
+          AND file_mappings.file_key > $marker_root
         ORDER BY file_mappings.file_key ASC
         LIMIT $int4
     """.query(mappingD)
@@ -394,7 +406,7 @@ case class Database(
       .map(withMaker(limit)(_.key))
   }
 
-  val getDelimitedQ: Query[(Prefix, Int, Delimiter, String, String, Prefix, Marker, Int), ((String, Option[Mapping]), String)] =
+  val getDelimitedQ: Query[(Prefix, Int, Delimiter, String, String, Prefix, Marker, Marker, Marker, Marker, Int), ((String, Option[Mapping]), Marker)] =
     sql"""
     WITH delimited as (
       SELECT
@@ -407,7 +419,7 @@ case class Database(
         WHERE user_name = $text
           AND file_mappings.bucket = $text
           AND starts_with(file_mappings.file_key, $prefix)
-          AND file_mappings.file_key > $marker
+          AND file_mappings.file_key >= $marker_root
       )
 
       SELECT delimited,
@@ -421,16 +433,19 @@ case class Database(
           max(CASE WHEN delimited=file_key THEN content_type ELSE null END) AS content_type,
           max(CASE WHEN delimited=file_key THEN created ELSE null END) AS created,
           max(CASE WHEN delimited=file_key THEN updated ELSE null END) AS updated,
-          max(file_key) AS full_key
+          max(CASE WHEN delimited=file_key THEN file_key ELSE delimited END) AS marker_root,
+          max(CASE WHEN delimited=file_key THEN 'file' ELSE 'dir' END) AS marker_mark
         FROM delimited
+        WHERE delimited > $marker_root
+          OR ( delimited = $marker_root AND CASE WHEN delimited=file_key THEN 'file' ELSE 'dir' END > $marker_mark )
         GROUP BY
           delimited,
           CASE WHEN delimited=file_key THEN uuid ELSE null END,
           CASE WHEN delimited=file_key THEN hash ELSE null END,
           CASE WHEN delimited=file_key THEN md5 ELSE null END
-        ORDER BY file_key ASC
+        ORDER BY marker_root ASC, marker_mark ASC
         LIMIT $int4
-    """.query(text ~ mappingD.opt ~ text)
+    """.query(text ~ mappingD.opt ~ markerD)
 
   def getDelimitedMappings(
       user_name: String,
@@ -444,13 +459,15 @@ case class Database(
     val pre   = prefix.getOrElse(Prefix.empty)
     val limit = maxResults.getOrElse(PAGE_SIZE)
 
+    log.error(s"getDelimitedMappings($user_name, $bucket, $delimiter, $prefix, $marker, $maxResults)");
+
     pool
       .use {
         _.prepare(getDelimitedQ).flatMap { pc =>
-          pc.stream((pre, Prefix.len(pre) + 1, delimiter, user_name, bucket, pre, after, limit), limit)
+          pc.stream((pre, Prefix.len(pre) + 1, delimiter, user_name, bucket, pre, after, after, after, after, limit), limit)
             .map {
-              case ((del, None), key)    => (del + delimiter, None, key)
-              case ((del, mapping), key) => (del, mapping, key)
+              case ((del, None), marker)    => (del + delimiter, None, marker.toString())
+              case ((del, mapping), marker) => (del, mapping, marker.toString())
             }
             .compile
             .toList

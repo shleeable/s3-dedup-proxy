@@ -190,16 +190,20 @@ class PgIntegrationTests extends CatsEffectSuite {
         _ <- assertIO(database.delMappings("A", "bucket", "wrefix"), 1)
 
         _ <- database.putMapping("A", "bucket", "prefix1", hashCode)
-        _ <- database.putMapping("A", "bucket", "prefix2", hashCode)
         _ <- database.putMapping("A", "bucket", "prefix2/toto/file1", hashCode)
         _ <- database.putMapping("A", "bucket", "prefix2/tata/file2", hashCode)
+        _ <- database.putMapping("A", "bucket", "prefix2", hashCode)
+        _ <- database.putMapping("A", "bucket", "prefix2#a", hashCode)
+        _ <- database.putMapping("A", "bucket", "prefix2#file", hashCode)
         _ <- assertIO(
           database.testDelimitedMappings("A", "bucket", Delimiter("/")),
           (
             List(
-              ("prefix1", Some(hashCode), "prefix1"),
-              ("prefix2", Some(hashCode), "prefix2"),
-              ("prefix2/", None, "prefix2/toto/file1")
+              ("prefix1", Some(hashCode), "prefix1#file"),
+              ("prefix2/", None, "prefix2#dir"),
+              ("prefix2", Some(hashCode), "prefix2#file"),
+              ("prefix2#a", Some(hashCode), "prefix2#a#file"),
+              ("prefix2#file", Some(hashCode), "prefix2#file#file"),
             ),
             None
           )
@@ -208,31 +212,51 @@ class PgIntegrationTests extends CatsEffectSuite {
           database.testDelimitedMappings("A", "bucket", Delimiter("/"), maxResults = Some(2)),
           (
             List(
-              ("prefix1", Some(hashCode), "prefix1"),
-              ("prefix2", Some(hashCode), "prefix2")
+              ("prefix1", Some(hashCode), "prefix1#file"),
+              ("prefix2/", None, "prefix2#dir")
             ),
-            Some("prefix2")
+            Some("prefix2#dir")
           )
         )
         _ <- assertIO(
-          database.testDelimitedMappings("A", "bucket", Delimiter("/"), marker = Some(Marker("prefix2")), maxResults = Some(2)),
-          (
-            List(("prefix2/", None, "prefix2/toto/file1")),
-            None
-          )
-        )
-        _ <- assertIO(
-          database.testDelimitedMappings("A", "bucket", Delimiter("/"), marker = Some(Marker("prefix1")), maxResults = Some(2)),
+          database.testDelimitedMappings("A", "bucket", Delimiter("/"), marker = Some(Marker.delimited("prefix2#dir")), maxResults = Some(2)),
           (
             List(
-              ("prefix2", Some(hashCode), "prefix2"),
-              ("prefix2/", None, "prefix2/toto/file1")
+              ("prefix2", Some(hashCode), "prefix2#file"),
+              ("prefix2#a", Some(hashCode), "prefix2#a#file"),
             ),
-            Some("prefix2/toto/file1")
+            Some("prefix2#a#file")
           )
         )
         _ <- assertIO(
-          database.testDelimitedMappings("A", "bucket", Delimiter("/"), marker = Some(Marker("prefix2/toto/file1"))),
+          database.testDelimitedMappings("A", "bucket", Delimiter("/"), marker = Some(Marker.delimited("prefix2#a#file")), maxResults = Some(2)),
+          (
+            List(("prefix2#file", Some(hashCode), "prefix2#file#file")),
+            None,
+          )
+        )
+        _ <- assertIO(
+          database.testDelimitedMappings("A", "bucket", Delimiter("/"), marker = Some(Marker.delimited("prefix1#file")), maxResults = Some(2)),
+          (
+            List(
+              ("prefix2/", None, "prefix2#dir"),
+              ("prefix2", Some(hashCode), "prefix2#file"),
+            ),
+            Some("prefix2#file")
+          )
+        )
+        _ <- assertIO(
+          database.testDelimitedMappings("A", "bucket", Delimiter("/"), marker = Some(Marker.delimited("prefix2#file")), maxResults = Some(2)),
+          (
+            List(
+              ("prefix2#a", Some(hashCode), "prefix2#a#file"),
+              ("prefix2#file", Some(hashCode), "prefix2#file#file"),
+            ),
+            Some("prefix2#file#file")
+          )
+        )
+        _ <- assertIO(
+          database.testDelimitedMappings("A", "bucket", Delimiter("/"), marker = Some(Marker.delimited("prefix2#file#file"))),
           (List.empty, None)
         )
         _ <- assertIO(
@@ -240,18 +264,18 @@ class PgIntegrationTests extends CatsEffectSuite {
             .testDelimitedMappings("A", "bucket", Delimiter("/"), Some(Prefix("prefix2/")), maxResults = Some(2)),
           (
             List(
-              ("prefix2/tata/", None, "prefix2/tata/file2"),
-              ("prefix2/toto/", None, "prefix2/toto/file1")
+              ("prefix2/tata/", None, "prefix2/tata#dir"),
+              ("prefix2/toto/", None, "prefix2/toto#dir"),
             ),
-            Some("prefix2/toto/file1")
+            Some("prefix2/toto#dir")
           )
         )
         _ <- assertIO(
           database
             .testDelimitedMappings("A", "bucket", Delimiter("/"), Some(Prefix("prefix2/tata/")), maxResults = Some(2)),
-          (List(("prefix2/tata/file2", Some(hashCode), "prefix2/tata/file2")), None)
+          (List(("prefix2/tata/file2", Some(hashCode), "prefix2/tata/file2#file")), None)
         )
-        _ <- assertIO(database.delMappings("A", "bucket"), 4)
+        _ <- assertIO(database.delMappings("A", "bucket"), 6)
 
         _ <- assertIO(database.delDanglingMetadatas(List(hashCode)), 1)
         _ <- assertIO(database.countMappings(hashCode), 0L)

@@ -150,7 +150,12 @@ object ProxyBlobStore {
       Option(lco.getDelimiter()).filter(_.nonEmpty).map(Database.Delimiter.apply)
   }
   object Marker {
-    def apply(lco: ListContainerOptions): Option[Database.Marker] = Option(lco.getMarker()).map(Database.Marker.apply)
+    def apply(lco: ListContainerOptions): Option[Database.Marker] = {
+      Delimiter.apply(lco) match {
+        case Some(_) => Option(lco.getMarker()).map(Database.Marker.delimited)
+        case None => Option(lco.getMarker()).map(Database.Marker.apply)
+      }
+    }
   }
   object Prefix {
     def apply(lco: ListContainerOptions): Option[Database.Prefix] = Option(lco.getPrefix()).map(Database.Prefix.apply)
