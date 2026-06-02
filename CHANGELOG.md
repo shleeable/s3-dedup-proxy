@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.5
+
+- When using delimiter list folder before files
+
 ## 0.0.4
 
 - Renamed config key `backend.access-key` and `backend.secret-key`.

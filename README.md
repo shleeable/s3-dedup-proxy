@@ -65,16 +65,17 @@ Configuration file need to follow [HOCON](https://github.com/lightbend/config/bl
 #### Docker
 
 A docker image is available at https://hub.docker.com/r/timshel/s3-dedup-proxy
+\
 By default configuration file should be provided at `/s3-dedup-proxy/application.conf`.
 
 ```bash
-> docker run --name s3proxy -v "$PWD/application.conf:/s3-dedup-proxy/application.conf" timshel/s3-dedup-proxy:0.0.4
+> docker run --name s3proxy -v "$PWD/application.conf:/s3-dedup-proxy/application.conf" timshel/s3-dedup-proxy:0.0.5
 ```
 
 Or if you want to mount the configuration file to a different location:
 
 ```bash
-> docker run --name s3proxy -v "$PWD/application.conf:/toto.conf" timshel/s3-dedup-proxy:0.0.4 -Dconfig.file=/toto.conf
+> docker run --name s3proxy -v "$PWD/application.conf:/toto.conf" timshel/s3-dedup-proxy:0.0.5 -Dconfig.file=/toto.conf
 ```
 
 ### Redirection API
